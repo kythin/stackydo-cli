@@ -1,6 +1,9 @@
 pub mod complete;
+pub mod context;
 pub mod create;
 pub mod delete;
 pub mod list;
 pub mod search;
 pub mod show;
+pub mod update;
+pub mod util;

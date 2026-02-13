@@ -4,11 +4,16 @@ use std::path::{Path, PathBuf};
 pub struct TodoPaths;
 
 impl TodoPaths {
-    /// Root storage directory: ~/.todos/
+    /// Root storage directory.
+    /// Uses `STACKSTODO_DIR` env var if set, otherwise defaults to `~/.stackstodo/`.
     pub fn root() -> PathBuf {
-        dirs::home_dir()
-            .expect("Cannot determine home directory")
-            .join(".todos")
+        if let Ok(dir) = std::env::var("STACKSTODO_DIR") {
+            PathBuf::from(dir)
+        } else {
+            dirs::home_dir()
+                .expect("Cannot determine home directory")
+                .join(".stackstodo")
+        }
     }
 
     /// Path to the manifest file
@@ -26,12 +31,12 @@ impl TodoPaths {
         std::fs::create_dir_all(Self::root())
     }
 
-    /// Walk up from `start_dir` looking for a `.todo-context` file.
+    /// Walk up from `start_dir` looking for a `.stackstodo-context` file.
     /// Returns the first one found, or None.
     pub fn find_todo_context(start_dir: &Path) -> Option<PathBuf> {
         let mut current = start_dir.to_path_buf();
         loop {
-            let candidate = current.join(".todo-context");
+            let candidate = current.join(".stackstodo-context");
             if candidate.is_file() {
                 return Some(candidate);
             }
@@ -42,10 +47,10 @@ impl TodoPaths {
         None
     }
 
-    /// Fallback ~/.todo-context path
+    /// Fallback ~/.stackstodo-context path
     pub fn home_todo_context() -> PathBuf {
         dirs::home_dir()
             .expect("Cannot determine home directory")
-            .join(".todo-context")
+            .join(".stackstodo-context")
     }
 }

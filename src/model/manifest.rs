@@ -37,13 +37,13 @@ impl Default for ManifestSettings {
     }
 }
 
-/// Root manifest stored at ~/.todos/manifest.json.
-/// Tracks tags, categories, settings, and feature flags.
+/// Root manifest stored at ~/.stackstodo/manifest.json.
+/// Tracks tags, stacks, settings, and feature flags.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
     pub version: String,
     pub tags: HashSet<String>,
-    pub categories: HashSet<String>,
+    pub stacks: HashSet<String>,
 
     /// Feature flags — some managed via TUI, others text-edit only
     #[serde(default)]
@@ -58,7 +58,7 @@ impl Default for Manifest {
         Self {
             version: "1.0".into(),
             tags: HashSet::new(),
-            categories: HashSet::new(),
+            stacks: HashSet::new(),
             features: HashMap::new(),
             settings: ManifestSettings::default(),
         }

@@ -1,4 +1,5 @@
 use crate::cli::args::SearchArgs;
+use crate::commands::util::format_task_row;
 use crate::error::Result;
 use crate::storage::task_store::TaskStore;
 
@@ -12,13 +13,7 @@ pub fn execute(args: &SearchArgs) -> Result<()> {
     }
 
     for task in &results {
-        let fm = &task.frontmatter;
-        println!(
-            "{status:<12} {id:.10}  {title}",
-            status = fm.status,
-            id = fm.id,
-            title = fm.title,
-        );
+        println!("{}", format_task_row(&task.frontmatter));
     }
     println!("\n({} result{})", results.len(), if results.len() == 1 { "" } else { "s" });
 

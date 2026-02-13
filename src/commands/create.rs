@@ -1,10 +1,10 @@
 use crate::cli::args::CreateArgs;
+use crate::commands::util::parse_due_date;
 use crate::context::dir_context;
 use crate::error::{Result, TodoError};
-use crate::model::task::{Priority, Task};
+use crate::model::task::{Dependency, DependencyType, Priority, Task};
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use std::path::PathBuf;
 
 /// Execute headless task creation.
@@ -74,7 +74,7 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
     if let Some(ref p) = args.priority {
         task.frontmatter.priority = Some(
             p.parse::<Priority>()
-                .map_err(|e| TodoError::Other(e))?,
+                .map_err(TodoError::Other)?,
         );
     }
 
@@ -89,50 +89,62 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
         task.frontmatter.tags = tags;
     }
 
+    if let Some(ref stack) = args.stack {
+        let stack = stack.trim().to_string();
+        if !stack.is_empty() {
+            let _ = manifest_store.register_stack(&stack);
+            task.frontmatter.stack = Some(stack);
+        }
+    }
+
     if let Some(ref due_str) = args.due {
         task.frontmatter.due = Some(parse_due_date(due_str)?);
+    }
+
+    // Wire dependencies
+    for raw_id in &args.blocked_by {
+        let dep_task = crate::commands::show::resolve_task_pub(&store, raw_id)?;
+        task.frontmatter.dependencies.push(Dependency {
+            task_id: dep_task.frontmatter.id,
+            dep_type: DependencyType::BlockedBy,
+        });
+    }
+    for raw_id in &args.blocks {
+        let dep_task = crate::commands::show::resolve_task_pub(&store, raw_id)?;
+        task.frontmatter.dependencies.push(Dependency {
+            task_id: dep_task.frontmatter.id,
+            dep_type: DependencyType::Blocks,
+        });
+    }
+    for raw_id in &args.related_to {
+        let dep_task = crate::commands::show::resolve_task_pub(&store, raw_id)?;
+        task.frontmatter.dependencies.push(Dependency {
+            task_id: dep_task.frontmatter.id,
+            dep_type: DependencyType::RelatedTo,
+        });
+    }
+
+    // Wire parent/subtask
+    if let Some(ref parent_raw) = args.parent {
+        let mut parent_task = crate::commands::show::resolve_task_pub(&store, parent_raw)?;
+        let parent_id = parent_task.frontmatter.id.clone();
+        task.frontmatter.parent_id = Some(parent_id.clone());
+
+        // Add this task as subtask of parent
+        if !parent_task.frontmatter.subtask_ids.contains(&id) {
+            parent_task.frontmatter.subtask_ids.push(id.clone());
+            parent_task.frontmatter.modified = chrono::Utc::now();
+            store.save(&parent_task)?;
+        }
     }
 
     // Save
     store.save(&task)?;
 
     // Print for shell integration
-    // Users can do: export TODO_LAST_ID=$(todo create --title "..." -- body)
+    // Users can do: export STACKSTODO_LAST_ID=$(stackstodo create --title "..." -- body)
     println!("{id}");
 
     Ok(id)
 }
 
-/// Parse a flexible due date string into UTC DateTime.
-/// Accepts: "2025-03-15", "2025-03-15 17:00", "2025-03-15T17:00:00+05:00", etc.
-fn parse_due_date(s: &str) -> Result<DateTime<Utc>> {
-    // Try RFC 3339 first (includes timezone)
-    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-        return Ok(dt.with_timezone(&Utc));
-    }
-
-    // Try common formats
-    let formats = [
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%dT%H:%M",
-        "%Y-%m-%d",
-    ];
-
-    for fmt in &formats {
-        if let Ok(naive) = NaiveDateTime::parse_from_str(s, fmt) {
-            return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc));
-        }
-    }
-
-    // Try date-only
-    if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-        let naive_dt = naive_date.and_hms_opt(0, 0, 0).unwrap();
-        return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive_dt, Utc));
-    }
-
-    Err(TodoError::InvalidDateTime(format!(
-        "Cannot parse '{s}'. Use formats like: 2025-03-15, 2025-03-15 17:00, or RFC 3339"
-    )))
-}

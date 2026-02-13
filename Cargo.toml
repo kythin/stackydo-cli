@@ -1,9 +1,17 @@
 [package]
-name = "todo"
+name = "stackstodo"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.70"
-description = "Context-aware CLI task manager with TUI"
+description = "Context-aware CLI task manager with TUI — stacks to do!"
+
+[[bin]]
+name = "stackstodo"
+path = "src/main.rs"
+
+[[bin]]
+name = "todo"
+path = "src/main.rs"
 
 [dependencies]
 # CLI

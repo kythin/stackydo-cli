@@ -12,6 +12,22 @@ pub enum TaskStatus {
     Cancelled,
 }
 
+impl std::str::FromStr for TaskStatus {
+    type Err = String;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "todo" => Ok(Self::Todo),
+            "in_progress" | "inprogress" | "doing" => Ok(Self::InProgress),
+            "done" => Ok(Self::Done),
+            "blocked" => Ok(Self::Blocked),
+            "cancelled" | "canceled" => Ok(Self::Cancelled),
+            _ => Err(format!(
+                "Invalid status: {s}. Use: todo, in_progress, done, blocked, cancelled"
+            )),
+        }
+    }
+}
+
 impl std::fmt::Display for TaskStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -108,7 +124,7 @@ pub struct ContextInfo {
     /// Working directory at creation time
     pub working_dir: String,
 
-    /// Content from nearest .todo-context file
+    /// Content from nearest .stackstodo-context file
     #[serde(skip_serializing_if = "Option::is_none")]
     pub todo_context_content: Option<String>,
 
@@ -131,8 +147,8 @@ pub struct TaskFrontmatter {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
 
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub categories: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stack: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due: Option<DateTime<Utc>>,
@@ -170,7 +186,7 @@ impl Task {
                 status: TaskStatus::Todo,
                 priority: None,
                 tags: Vec::new(),
-                categories: Vec::new(),
+                stack: None,
                 due: None,
                 created: now,
                 modified: now,

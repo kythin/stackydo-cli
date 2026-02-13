@@ -1,8 +1,8 @@
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "todo")]
-#[command(version, about = "Context-aware task manager with TUI")]
+#[command(name = "stackstodo")]
+#[command(version, about = "Context-aware task manager with TUI — stacks to do!")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -20,6 +20,9 @@ pub enum Commands {
     /// Show a task's full details
     Show(ShowArgs),
 
+    /// Update a task's fields
+    Update(UpdateArgs),
+
     /// Mark a task as done
     Complete(CompleteArgs),
 
@@ -28,6 +31,9 @@ pub enum Commands {
 
     /// Search tasks by title and body content
     Search(SearchArgs),
+
+    /// Show the context that would be captured for a new task (debugging)
+    Context,
 }
 
 #[derive(Parser)]
@@ -48,6 +54,26 @@ pub struct CreateArgs {
     #[arg(long, value_parser = ["critical", "high", "medium", "low"])]
     pub priority: Option<String>,
 
+    /// Stack to put this task on (e.g. "work", "personal", "sprint-12")
+    #[arg(long)]
+    pub stack: Option<String>,
+
+    /// Task ID that blocks this task (repeatable)
+    #[arg(long, action = ArgAction::Append)]
+    pub blocked_by: Vec<String>,
+
+    /// Task ID that this task blocks (repeatable)
+    #[arg(long, action = ArgAction::Append)]
+    pub blocks: Vec<String>,
+
+    /// Related task ID (repeatable)
+    #[arg(long, action = ArgAction::Append)]
+    pub related_to: Vec<String>,
+
+    /// Parent task ID (makes this a subtask)
+    #[arg(long)]
+    pub parent: Option<String>,
+
     /// Context file or folder path (defaults to CWD)
     #[arg(long)]
     pub context_path: Option<String>,
@@ -66,6 +92,56 @@ pub struct CreateArgs {
 }
 
 #[derive(Parser)]
+pub struct UpdateArgs {
+    /// Task ID (ULID) or unique prefix
+    pub id: String,
+
+    /// New title
+    #[arg(long)]
+    pub title: Option<String>,
+
+    /// New status: todo, in_progress, done, blocked, cancelled
+    #[arg(long)]
+    pub status: Option<String>,
+
+    /// New priority: critical, high, medium, low, none (clears)
+    #[arg(long)]
+    pub priority: Option<String>,
+
+    /// Replace tags (comma-separated; empty string clears)
+    #[arg(long)]
+    pub tags: Option<String>,
+
+    /// Set stack (empty string clears)
+    #[arg(long)]
+    pub stack: Option<String>,
+
+    /// Set due date (empty string clears)
+    #[arg(long)]
+    pub due: Option<String>,
+
+    /// Task ID that blocks this task (repeatable, appends)
+    #[arg(long, action = ArgAction::Append)]
+    pub blocked_by: Vec<String>,
+
+    /// Task ID that this task blocks (repeatable, appends)
+    #[arg(long, action = ArgAction::Append)]
+    pub blocks: Vec<String>,
+
+    /// Related task ID (repeatable, appends)
+    #[arg(long, action = ArgAction::Append)]
+    pub related_to: Vec<String>,
+
+    /// Set parent task ID (makes this a subtask)
+    #[arg(long)]
+    pub parent: Option<String>,
+
+    /// Text to append to body (everything after --)
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub body: Vec<String>,
+}
+
+#[derive(Parser)]
 pub struct ListArgs {
     /// Filter by status: todo, in_progress, done, blocked, cancelled
     #[arg(long)]
@@ -78,6 +154,10 @@ pub struct ListArgs {
     /// Filter by priority
     #[arg(long)]
     pub priority: Option<String>,
+
+    /// Filter by stack
+    #[arg(long)]
+    pub stack: Option<String>,
 
     /// Sort by: created, due, priority, modified (default: created)
     #[arg(long, default_value = "created")]
@@ -100,18 +180,50 @@ pub struct ShowArgs {
 
 #[derive(Parser)]
 pub struct CompleteArgs {
-    /// Task ID (ULID) or unique prefix
-    pub id: String,
+    /// Task ID (ULID) or unique prefix (omit for bulk mode)
+    pub id: Option<String>,
+
+    /// Bulk: filter by status
+    #[arg(long)]
+    pub status: Option<String>,
+
+    /// Bulk: filter by tag
+    #[arg(long)]
+    pub tag: Option<String>,
+
+    /// Bulk: filter by stack
+    #[arg(long)]
+    pub stack: Option<String>,
+
+    /// Required safety flag for bulk operations
+    #[arg(long)]
+    pub all: bool,
 }
 
 #[derive(Parser)]
 pub struct DeleteArgs {
-    /// Task ID (ULID) or unique prefix
-    pub id: String,
+    /// Task ID (ULID) or unique prefix (omit for bulk mode)
+    pub id: Option<String>,
 
     /// Skip confirmation
     #[arg(long, short)]
     pub force: bool,
+
+    /// Bulk: filter by status
+    #[arg(long)]
+    pub status: Option<String>,
+
+    /// Bulk: filter by tag
+    #[arg(long)]
+    pub tag: Option<String>,
+
+    /// Bulk: filter by stack
+    #[arg(long)]
+    pub stack: Option<String>,
+
+    /// Required safety flag for bulk operations
+    #[arg(long)]
+    pub all: bool,
 }
 
 #[derive(Parser)]

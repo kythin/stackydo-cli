@@ -3,11 +3,11 @@ use crate::storage::paths::TodoPaths;
 use std::fs;
 use std::path::Path;
 
-/// Discover and read the nearest `.todo-context` file.
+/// Discover and read the nearest `.stackstodo-context` file.
 ///
 /// Search order:
-/// 1. Walk up from `start_dir` looking for `.todo-context`
-/// 2. Fall back to `~/.todo-context`
+/// 1. Walk up from `start_dir` looking for `.stackstodo-context`
+/// 2. Fall back to `~/.stackstodo-context`
 /// 3. Return None if neither exists
 pub fn discover(start_dir: &Path) -> Option<TodoContextFile> {
     // Try ancestry walk first

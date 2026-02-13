@@ -16,8 +16,8 @@ pub fn execute(args: &ShowArgs) -> Result<()> {
     if !fm.tags.is_empty() {
         println!("Tags:     {}", fm.tags.join(", "));
     }
-    if !fm.categories.is_empty() {
-        println!("Categories: {}", fm.categories.join(", "));
+    if let Some(ref stack) = fm.stack {
+        println!("Stack:    {stack}");
     }
     if let Some(due) = fm.due {
         println!("Due:      {}", due.format("%Y-%m-%d %H:%M %Z"));
@@ -52,6 +52,17 @@ pub fn execute(args: &ShowArgs) -> Result<()> {
     }
     if let Some(ref prev) = fm.context.session_prev_task_id {
         println!("Prev task: {prev}");
+    }
+
+    // Parent / subtasks
+    if let Some(ref parent_id) = fm.parent_id {
+        println!("\nParent:   {parent_id}");
+    }
+    if !fm.subtask_ids.is_empty() {
+        println!("\n--- Subtasks ---");
+        for sid in &fm.subtask_ids {
+            println!("  {sid}");
+        }
     }
 
     // Dependencies

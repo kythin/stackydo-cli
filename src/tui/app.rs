@@ -1,5 +1,9 @@
+use crate::context::dir_context::{self, CaptureResult};
+use crate::model::manifest::ManifestSettings;
 use crate::model::task::{Priority, Task, TaskStatus};
+use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
+use std::path::PathBuf;
 
 /// Which pane/mode the TUI is in
 #[derive(Debug, Clone, PartialEq)]
@@ -10,6 +14,52 @@ pub enum InputMode {
     Searching,
     /// Filter menu open
     FilterMenu,
+    /// Creating a new task — multi-field form
+    Creating(CreateField),
+    /// Viewing/editing settings
+    Settings,
+}
+
+/// Which field is active in the create-task form
+#[derive(Debug, Clone, PartialEq)]
+pub enum CreateField {
+    Title,
+    Priority,
+    Tags,
+    Stack,
+    Body,
+}
+
+impl CreateField {
+    pub fn next(&self) -> Self {
+        match self {
+            Self::Title => Self::Priority,
+            Self::Priority => Self::Tags,
+            Self::Tags => Self::Stack,
+            Self::Stack => Self::Body,
+            Self::Body => Self::Title,
+        }
+    }
+
+    pub fn prev(&self) -> Self {
+        match self {
+            Self::Title => Self::Body,
+            Self::Priority => Self::Title,
+            Self::Tags => Self::Priority,
+            Self::Stack => Self::Tags,
+            Self::Body => Self::Stack,
+        }
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            Self::Title => "Title",
+            Self::Priority => "Priority",
+            Self::Tags => "Tags",
+            Self::Stack => "Stack",
+            Self::Body => "Body",
+        }
+    }
 }
 
 /// Sort field options
@@ -49,6 +99,45 @@ pub struct FilterState {
     pub priority: Option<Priority>,
 }
 
+/// State for the create-task form
+#[derive(Debug, Clone, Default)]
+pub struct CreateState {
+    pub title: String,
+    pub priority: Option<Priority>,
+    pub tags: String,
+    pub stack: String,
+    pub body: String,
+}
+
+/// Which settings field is selected
+#[derive(Debug, Clone, PartialEq)]
+pub enum SettingsField {
+    DefaultSort,
+    DefaultFilter,
+    AutoCaptureGit,
+    QuickListLimit,
+}
+
+impl SettingsField {
+    pub fn next(&self) -> Self {
+        match self {
+            Self::DefaultSort => Self::DefaultFilter,
+            Self::DefaultFilter => Self::AutoCaptureGit,
+            Self::AutoCaptureGit => Self::QuickListLimit,
+            Self::QuickListLimit => Self::DefaultSort,
+        }
+    }
+
+    pub fn prev(&self) -> Self {
+        match self {
+            Self::DefaultSort => Self::QuickListLimit,
+            Self::DefaultFilter => Self::DefaultSort,
+            Self::AutoCaptureGit => Self::DefaultFilter,
+            Self::QuickListLimit => Self::AutoCaptureGit,
+        }
+    }
+}
+
 /// Core TUI application state
 pub struct App {
     /// All tasks loaded from disk
@@ -81,10 +170,33 @@ pub struct App {
 
     /// Status message (bottom bar)
     pub status_msg: Option<String>,
+
+    /// Current context captured from CWD
+    pub context: Option<CaptureResult>,
+
+    /// Create-task form state
+    pub create_state: CreateState,
+
+    /// Settings loaded from manifest
+    pub settings: ManifestSettings,
+
+    /// Selected settings field
+    pub settings_field: SettingsField,
 }
 
 impl App {
     pub fn new() -> Self {
+        // Capture context from CWD
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let context = Some(dir_context::capture_full(&cwd));
+
+        // Load settings from manifest
+        let manifest_store = ManifestStore::new();
+        let settings = manifest_store
+            .load()
+            .map(|m| m.settings)
+            .unwrap_or_default();
+
         Self {
             all_tasks: Vec::new(),
             visible_tasks: Vec::new(),
@@ -97,6 +209,10 @@ impl App {
             filters: FilterState::default(),
             should_quit: false,
             status_msg: None,
+            context,
+            create_state: CreateState::default(),
+            settings,
+            settings_field: SettingsField::DefaultSort,
         }
     }
 
@@ -260,5 +376,67 @@ impl App {
             None => "Filter: all".into(),
             Some(s) => format!("Filter: {s}"),
         });
+    }
+
+    /// Submit the create form: build a task, save it, reload the list.
+    pub fn submit_create(&mut self) -> crate::error::Result<()> {
+        let title = self.create_state.title.trim().to_string();
+        if title.is_empty() {
+            self.status_msg = Some("Title cannot be empty.".into());
+            return Ok(());
+        }
+
+        let id = ulid::Ulid::new().to_string();
+        let cwd = std::env::current_dir()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| ".".into());
+
+        let ctx_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let ctx = dir_context::capture(&ctx_path);
+
+        let mut task = Task::new(id, title, cwd);
+        task.frontmatter.context = ctx;
+        task.frontmatter.priority = self.create_state.priority.clone();
+        task.body = self.create_state.body.trim().to_string();
+
+        // Parse tags
+        let tags: Vec<String> = self
+            .create_state
+            .tags
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !tags.is_empty() {
+            let manifest_store = ManifestStore::new();
+            let _ = manifest_store.register_tags(&tags);
+        }
+        task.frontmatter.tags = tags;
+
+        // Stack
+        let stack = self.create_state.stack.trim().to_string();
+        if !stack.is_empty() {
+            let manifest_store = ManifestStore::new();
+            let _ = manifest_store.register_stack(&stack);
+            task.frontmatter.stack = Some(stack);
+        }
+
+        let store = TaskStore::new();
+        store.save(&task)?;
+
+        self.create_state = CreateState::default();
+        self.load_tasks()?;
+        self.status_msg = Some("Task created.".into());
+        Ok(())
+    }
+
+    /// Save current settings to manifest
+    pub fn save_settings(&mut self) -> crate::error::Result<()> {
+        let manifest_store = ManifestStore::new();
+        let mut manifest = manifest_store.load()?;
+        manifest.settings = self.settings.clone();
+        manifest_store.save(&manifest)?;
+        self.status_msg = Some("Settings saved.".into());
+        Ok(())
     }
 }

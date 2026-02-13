@@ -1,4 +1,5 @@
 use crate::cli::args::ListArgs;
+use crate::commands::util::format_task_row;
 use crate::error::Result;
 use crate::model::task::{Priority, TaskStatus};
 use crate::storage::task_store::TaskStore;
@@ -9,8 +10,7 @@ pub fn execute(args: &ListArgs) -> Result<()> {
 
     // Filter by status
     if let Some(ref status_str) = args.status {
-        let status = parse_status(status_str);
-        if let Some(s) = status {
+        if let Ok(s) = status_str.parse::<TaskStatus>() {
             tasks.retain(|t| t.frontmatter.status == s);
         }
     }
@@ -31,6 +31,18 @@ pub fn execute(args: &ListArgs) -> Result<()> {
         if let Ok(pri) = pri_str.parse::<Priority>() {
             tasks.retain(|t| t.frontmatter.priority.as_ref() == Some(&pri));
         }
+    }
+
+    // Filter by stack
+    if let Some(ref stack) = args.stack {
+        let stack_lower = stack.to_lowercase();
+        tasks.retain(|t| {
+            t.frontmatter
+                .stack
+                .as_ref()
+                .map(|s| s.to_lowercase() == stack_lower)
+                .unwrap_or(false)
+        });
     }
 
     // Sort
@@ -57,43 +69,10 @@ pub fn execute(args: &ListArgs) -> Result<()> {
     }
 
     for task in &tasks {
-        let fm = &task.frontmatter;
-        let pri = fm
-            .priority
-            .as_ref()
-            .map(|p| format!("[{p}]"))
-            .unwrap_or_default();
-        let due = fm
-            .due
-            .map(|d| format!(" due:{}", d.format("%Y-%m-%d")))
-            .unwrap_or_default();
-        let tags = if fm.tags.is_empty() {
-            String::new()
-        } else {
-            format!(" #{}", fm.tags.join(" #"))
-        };
-
-        println!(
-            "{status:<12} {id:.10}  {pri:<10} {title}{due}{tags}",
-            status = fm.status,
-            id = fm.id,
-            pri = pri,
-            title = fm.title,
-        );
+        println!("{}", format_task_row(&task.frontmatter));
     }
 
     println!("\n({} task{})", tasks.len(), if tasks.len() == 1 { "" } else { "s" });
 
     Ok(())
-}
-
-fn parse_status(s: &str) -> Option<TaskStatus> {
-    match s.to_lowercase().as_str() {
-        "todo" => Some(TaskStatus::Todo),
-        "in_progress" | "inprogress" | "doing" => Some(TaskStatus::InProgress),
-        "done" => Some(TaskStatus::Done),
-        "blocked" => Some(TaskStatus::Blocked),
-        "cancelled" | "canceled" => Some(TaskStatus::Cancelled),
-        _ => None,
-    }
 }

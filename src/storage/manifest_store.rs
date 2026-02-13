@@ -4,7 +4,7 @@ use crate::storage::paths::TodoPaths;
 use std::fs;
 use std::path::PathBuf;
 
-/// JSON-backed manifest store at ~/.todos/manifest.json
+/// JSON-backed manifest store at ~/.stackstodo/manifest.json
 pub struct ManifestStore {
     path: PathBuf,
 }
@@ -49,12 +49,10 @@ impl ManifestStore {
         self.save(&manifest)
     }
 
-    /// Register a category in the manifest (idempotent).
-    pub fn register_categories(&self, categories: &[String]) -> Result<()> {
+    /// Register a stack in the manifest (idempotent).
+    pub fn register_stack(&self, stack: &str) -> Result<()> {
         let mut manifest = self.load()?;
-        for cat in categories {
-            manifest.categories.insert(cat.clone());
-        }
+        manifest.stacks.insert(stack.to_string());
         self.save(&manifest)
     }
 }
