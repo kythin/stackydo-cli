@@ -40,8 +40,8 @@ pub fn format_task_line(task: &Task, selected: bool) -> ListItem<'static> {
         _ => Color::DarkGray,
     };
 
-    let title = if fm.title.len() > 30 {
-        format!("{}...", &fm.title[..27])
+    let title = if fm.title.chars().count() > 30 {
+        format!("{}...", fm.title.chars().take(27).collect::<String>())
     } else {
         fm.title.clone()
     };

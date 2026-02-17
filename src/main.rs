@@ -40,6 +40,18 @@ fn main() {
         Some(Commands::Context) => {
             commands::context::execute()
         }
+        Some(Commands::Stats(ref args)) => {
+            commands::stats::execute(args)
+        }
+        Some(Commands::Stacks(ref args)) => {
+            commands::stacks::execute(args)
+        }
+        Some(Commands::Init(ref args)) => {
+            commands::init::execute(args)
+        }
+        Some(Commands::Import(ref args)) => {
+            commands::import::execute(args)
+        }
     };
 
     if let Err(e) = result {

@@ -37,10 +37,10 @@ pub fn execute(args: &CompleteArgs) -> Result<()> {
         ));
     }
 
-    let status_filter = args
-        .status
-        .as_ref()
-        .and_then(|s| s.parse::<TaskStatus>().ok());
+    let status_filter = match &args.status {
+        Some(s) => Some(s.parse::<TaskStatus>().map_err(TodoError::Other)?),
+        None => None,
+    };
     let tag_filter = args.tag.as_deref();
     let stack_filter = args.stack.as_deref();
 

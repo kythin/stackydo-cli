@@ -34,6 +34,18 @@ pub enum Commands {
 
     /// Show the context that would be captured for a new task (debugging)
     Context,
+
+    /// Show aggregate statistics across all tasks
+    Stats(StatsArgs),
+
+    /// List all known stacks with per-stack status counts
+    Stacks(StacksArgs),
+
+    /// Initialize a new stackstodo workspace
+    Init(InitArgs),
+
+    /// Import tasks from stdin (JSON or YAML)
+    Import(ImportArgs),
 }
 
 #[derive(Parser)]
@@ -120,6 +132,10 @@ pub struct UpdateArgs {
     #[arg(long)]
     pub due: Option<String>,
 
+    /// Append a timestamped note to the body
+    #[arg(long)]
+    pub note: Option<String>,
+
     /// Task ID that blocks this task (repeatable, appends)
     #[arg(long, action = ArgAction::Append)]
     pub blocked_by: Vec<String>,
@@ -131,6 +147,10 @@ pub struct UpdateArgs {
     /// Related task ID (repeatable, appends)
     #[arg(long, action = ArgAction::Append)]
     pub related_to: Vec<String>,
+
+    /// Clear all dependencies before adding new ones
+    #[arg(long)]
+    pub clear_deps: bool,
 
     /// Set parent task ID (makes this a subtask)
     #[arg(long)]
@@ -170,12 +190,40 @@ pub struct ListArgs {
     /// Limit number of results
     #[arg(long)]
     pub limit: Option<usize>,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+
+    /// Show only overdue tasks (due before now, not done/cancelled)
+    #[arg(long)]
+    pub overdue: bool,
+
+    /// Filter tasks due before this date
+    #[arg(long)]
+    pub due_before: Option<String>,
+
+    /// Filter tasks due after this date
+    #[arg(long)]
+    pub due_after: Option<String>,
+
+    /// Filter tasks due this week (Monday–Sunday)
+    #[arg(long)]
+    pub due_this_week: bool,
+
+    /// Group output by field (e.g. "stack")
+    #[arg(long)]
+    pub group_by: Option<String>,
 }
 
 #[derive(Parser)]
 pub struct ShowArgs {
     /// Task ID (ULID) or unique prefix
     pub id: String,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Parser)]
@@ -230,4 +278,44 @@ pub struct DeleteArgs {
 pub struct SearchArgs {
     /// Search query (matched against title and body)
     pub query: String,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Parser)]
+pub struct StatsArgs {
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Parser)]
+pub struct StacksArgs {
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Parser)]
+pub struct InitArgs {
+    /// Override storage directory path
+    #[arg(long)]
+    pub dir: Option<String>,
+
+    /// Non-interactive mode, accept defaults
+    #[arg(long, short)]
+    pub yes: bool,
+
+    /// Initialize git in the storage directory
+    #[arg(long)]
+    pub git: bool,
+}
+
+#[derive(Parser)]
+pub struct ImportArgs {
+    /// Input format: json or yaml (default: json)
+    #[arg(long, default_value = "json")]
+    pub format: String,
 }

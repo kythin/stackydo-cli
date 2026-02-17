@@ -53,7 +53,9 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
-            let _ = manifest_store.register_tags(&tags);
+            if let Err(e) = manifest_store.register_tags(&tags) {
+                eprintln!("Warning: failed to register tags in manifest: {e}");
+            }
             task.frontmatter.tags = tags;
         }
         changed = true;
@@ -65,7 +67,9 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
         if stack.is_empty() {
             task.frontmatter.stack = None;
         } else {
-            let _ = manifest_store.register_stack(&stack);
+            if let Err(e) = manifest_store.register_stack(&stack) {
+                eprintln!("Warning: failed to register stack in manifest: {e}");
+            }
             task.frontmatter.stack = Some(stack);
         }
         changed = true;
@@ -78,6 +82,12 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
         } else {
             task.frontmatter.due = Some(parse_due_date(due_str)?);
         }
+        changed = true;
+    }
+
+    // Clear dependencies if requested
+    if args.clear_deps && !task.frontmatter.dependencies.is_empty() {
+        task.frontmatter.dependencies.clear();
         changed = true;
     }
 
@@ -133,6 +143,18 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
         } else {
             task.body.push('\n');
             task.body.push_str(&extra);
+        }
+        changed = true;
+    }
+
+    // Note (timestamped append)
+    if let Some(ref note_text) = args.note {
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M");
+        let entry = format!("\n[{timestamp}] {note_text}");
+        if task.body.is_empty() {
+            task.body = entry.trim_start().to_string();
+        } else {
+            task.body.push_str(&entry);
         }
         changed = true;
     }

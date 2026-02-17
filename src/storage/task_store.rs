@@ -11,6 +11,12 @@ pub struct TaskStore {
     root: PathBuf,
 }
 
+impl Default for TaskStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskStore {
     pub fn new() -> Self {
         Self {
@@ -50,7 +56,7 @@ impl TaskStore {
         for entry in fs::read_dir(&self.root)? {
             let entry = entry?;
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "md") {
+            if path.extension().is_some_and(|ext| ext == "md") {
                 match fs::read_to_string(&path) {
                     Ok(content) => match parse_task(&content) {
                         Ok(task) => tasks.push(task),
@@ -142,13 +148,13 @@ fn serialize_task(task: &Task) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::task::{ContextInfo, TaskStatus};
+    use crate::model::task::{Priority, TaskStatus};
 
     #[test]
     fn roundtrip_serialize_parse() {
         let task = Task::new("TEST123".into(), "Test task".into(), "/tmp".into());
-        let md = serialize_task(&task).unwrap();
-        let parsed = parse_task(&md).unwrap();
+        let md = serialize_task(&task).expect("serialize should succeed");
+        let parsed = parse_task(&md).expect("parse should succeed");
         assert_eq!(parsed.frontmatter.id, "TEST123");
         assert_eq!(parsed.frontmatter.title, "Test task");
         assert_eq!(parsed.frontmatter.status, TaskStatus::Todo);
@@ -170,8 +176,186 @@ This is the body content.
 
 With multiple paragraphs.
 "#;
-        let task = parse_task(md).unwrap();
+        let task = parse_task(md).expect("parse should succeed");
         assert_eq!(task.frontmatter.id, "ABC");
         assert!(task.body.contains("multiple paragraphs"));
+    }
+
+    // ── Corruption / resilience tests (feature 11) ──
+
+    #[test]
+    fn parse_missing_opening_delimiter() {
+        let md = "id: ABC\ntitle: Hello\n---\n";
+        assert!(parse_task(md).is_err());
+    }
+
+    #[test]
+    fn parse_missing_closing_delimiter() {
+        let md = "---\nid: ABC\ntitle: Hello\n";
+        assert!(parse_task(md).is_err());
+    }
+
+    #[test]
+    fn parse_invalid_yaml() {
+        let md = "---\n: : : invalid yaml [[\n---\n";
+        assert!(parse_task(md).is_err());
+    }
+
+    #[test]
+    fn parse_empty_file() {
+        assert!(parse_task("").is_err());
+        assert!(parse_task("   ").is_err());
+    }
+
+    #[test]
+    fn load_all_skips_corrupt_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = TaskStore::with_root(dir.path().to_path_buf());
+
+        // Write a valid task
+        let valid = Task::new("VALID1".into(), "Valid task".into(), "/tmp".into());
+        store.save(&valid).expect("save valid");
+
+        // Write a corrupt .md file
+        std::fs::write(dir.path().join("CORRUPT.md"), "not valid frontmatter")
+            .expect("write corrupt");
+
+        // Write another valid task
+        let valid2 = Task::new("VALID2".into(), "Valid task 2".into(), "/tmp".into());
+        store.save(&valid2).expect("save valid2");
+
+        let tasks = store.load_all().expect("load_all should succeed");
+        assert_eq!(tasks.len(), 2, "should load 2 valid tasks, skipping corrupt");
+    }
+
+    // ── Roundtrip with rich fields ──
+
+    #[test]
+    fn roundtrip_with_all_fields() {
+        use chrono::Utc;
+
+        let mut task = Task::new("RICH1".into(), "Rich task".into(), "/home/user".into());
+        task.frontmatter.priority = Some(Priority::High);
+        task.frontmatter.tags = vec!["backend".into(), "urgent".into()];
+        task.frontmatter.stack = Some("work".into());
+        task.frontmatter.due = Some(Utc::now());
+        task.body = "Some body content\nwith newlines\n".to_string();
+
+        let md = serialize_task(&task).expect("serialize");
+        let parsed = parse_task(&md).expect("parse");
+
+        assert_eq!(parsed.frontmatter.id, "RICH1");
+        assert_eq!(parsed.frontmatter.title, "Rich task");
+        assert_eq!(parsed.frontmatter.priority, Some(Priority::High));
+        assert_eq!(parsed.frontmatter.tags, vec!["backend", "urgent"]);
+        assert_eq!(parsed.frontmatter.stack, Some("work".into()));
+        assert!(parsed.frontmatter.due.is_some());
+        assert!(parsed.body.contains("with newlines"));
+    }
+
+    #[test]
+    fn roundtrip_empty_body() {
+        let task = Task::new("EMPTY1".into(), "No body".into(), "/tmp".into());
+        let md = serialize_task(&task).expect("serialize");
+        let parsed = parse_task(&md).expect("parse");
+        assert!(parsed.body.is_empty());
+    }
+
+    #[test]
+    fn roundtrip_unicode_title() {
+        let task = Task::new("UNI1".into(), "日本語タスク 🚀".into(), "/tmp".into());
+        let md = serialize_task(&task).expect("serialize");
+        let parsed = parse_task(&md).expect("parse");
+        assert_eq!(parsed.frontmatter.title, "日本語タスク 🚀");
+    }
+}
+
+#[cfg(test)]
+mod proptest_tests {
+    use super::*;
+    use crate::model::task::{ContextInfo, Priority, TaskStatus};
+    use chrono::{DateTime, TimeZone, Utc};
+    use proptest::prelude::*;
+
+    fn arb_status() -> impl Strategy<Value = TaskStatus> {
+        prop_oneof![
+            Just(TaskStatus::Todo),
+            Just(TaskStatus::InProgress),
+            Just(TaskStatus::Done),
+            Just(TaskStatus::Blocked),
+            Just(TaskStatus::Cancelled),
+        ]
+    }
+
+    fn arb_priority() -> impl Strategy<Value = Option<Priority>> {
+        prop_oneof![
+            Just(None),
+            Just(Some(Priority::Critical)),
+            Just(Some(Priority::High)),
+            Just(Some(Priority::Medium)),
+            Just(Some(Priority::Low)),
+        ]
+    }
+
+    fn arb_datetime() -> impl Strategy<Value = DateTime<Utc>> {
+        // Dates between 2020 and 2030
+        (2020i32..2030, 1u32..13, 1u32..29, 0u32..24, 0u32..60).prop_map(
+            |(y, m, d, h, min)| {
+                Utc.with_ymd_and_hms(y, m, d, h, min, 0)
+                    .single()
+                    .unwrap_or_else(|| Utc::now())
+            },
+        )
+    }
+
+    fn arb_tag() -> impl Strategy<Value = String> {
+        "[a-z][a-z0-9_-]{0,15}".prop_map(|s| s)
+    }
+
+    proptest! {
+        #[test]
+        fn roundtrip_proptest(
+            id in "[A-Z0-9]{10,26}",
+            title in ".{1,100}",
+            status in arb_status(),
+            priority in arb_priority(),
+            tags in proptest::collection::vec(arb_tag(), 0..5),
+            stack in proptest::option::of("[a-z][a-z0-9-]{0,15}"),
+            created in arb_datetime(),
+            modified in arb_datetime(),
+            body in ".*",
+        ) {
+            let task = Task {
+                frontmatter: TaskFrontmatter {
+                    id: id.clone(),
+                    title: title.clone(),
+                    status: status.clone(),
+                    priority: priority.clone(),
+                    tags: tags.clone(),
+                    stack: stack.clone(),
+                    due: None,
+                    created,
+                    modified,
+                    parent_id: None,
+                    subtask_ids: Vec::new(),
+                    dependencies: Vec::new(),
+                    context: ContextInfo {
+                        working_dir: "/tmp".into(),
+                        ..Default::default()
+                    },
+                },
+                body: body.clone(),
+            };
+
+            let md = serialize_task(&task).expect("serialize should succeed");
+            let parsed = parse_task(&md).expect("parse should succeed");
+
+            prop_assert_eq!(&parsed.frontmatter.id, &id);
+            prop_assert_eq!(&parsed.frontmatter.title, &title);
+            prop_assert_eq!(&parsed.frontmatter.status, &status);
+            prop_assert_eq!(&parsed.frontmatter.priority, &priority);
+            prop_assert_eq!(&parsed.frontmatter.tags, &tags);
+            prop_assert_eq!(&parsed.frontmatter.stack, &stack);
+        }
     }
 }

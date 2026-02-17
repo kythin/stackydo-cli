@@ -1,6 +1,7 @@
 use crate::error::{Result, TodoError};
 use crate::model::task::{Task, TaskFrontmatter, TaskStatus};
 use chrono::{DateTime, NaiveDateTime, Utc};
+use serde::Serialize;
 
 /// Parse a flexible due date string into UTC DateTime.
 /// Accepts: "2025-03-15", "2025-03-15 17:00", "2025-03-15T17:00:00+05:00", etc.
@@ -27,7 +28,9 @@ pub fn parse_due_date(s: &str) -> Result<DateTime<Utc>> {
 
     // Try date-only
     if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-        let naive_dt = naive_date.and_hms_opt(0, 0, 0).unwrap();
+        let naive_dt = naive_date.and_hms_opt(0, 0, 0).ok_or_else(|| {
+            TodoError::InvalidDateTime(format!("Cannot convert date '{s}' to datetime"))
+        })?;
         return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive_dt, Utc));
     }
 
@@ -98,4 +101,18 @@ pub fn matches_filters(
         }
     }
     true
+}
+
+/// Print a single value as JSON to stdout.
+pub fn print_json<T: Serialize>(value: &T) -> Result<()> {
+    let json = serde_json::to_string_pretty(value)?;
+    println!("{json}");
+    Ok(())
+}
+
+/// Print a slice of values as a JSON array to stdout.
+pub fn print_json_array<T: Serialize>(values: &[T]) -> Result<()> {
+    let json = serde_json::to_string_pretty(values)?;
+    println!("{json}");
+    Ok(())
 }

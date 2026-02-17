@@ -11,6 +11,22 @@ pub fn execute(args: &DeleteArgs) -> Result<()> {
     if let Some(ref id) = args.id {
         let task = crate::commands::show::resolve_task_pub(&store, id)?;
 
+        // Warn about orphaned subtasks
+        if !task.frontmatter.subtask_ids.is_empty() {
+            eprintln!(
+                "Warning: this task has {} subtask(s) that will become orphaned.",
+                task.frontmatter.subtask_ids.len()
+            );
+        }
+
+        // Warn about tasks that depend on this one
+        if !task.frontmatter.dependencies.is_empty() {
+            eprintln!(
+                "Warning: this task has {} dependency link(s).",
+                task.frontmatter.dependencies.len()
+            );
+        }
+
         if !args.force {
             eprint!(
                 "Delete '{}' ({})? [y/N] ",
@@ -22,6 +38,15 @@ pub fn execute(args: &DeleteArgs) -> Result<()> {
             if !input.trim().eq_ignore_ascii_case("y") {
                 println!("Cancelled.");
                 return Ok(());
+            }
+        }
+
+        // Clear parent's subtask reference if this task has a parent
+        if let Some(ref parent_id) = task.frontmatter.parent_id {
+            if let Ok(mut parent) = store.load(parent_id) {
+                parent.frontmatter.subtask_ids.retain(|s| s != &task.frontmatter.id);
+                parent.frontmatter.modified = chrono::Utc::now();
+                let _ = store.save(&parent);
             }
         }
 
@@ -50,10 +75,10 @@ pub fn execute(args: &DeleteArgs) -> Result<()> {
         ));
     }
 
-    let status_filter = args
-        .status
-        .as_ref()
-        .and_then(|s| s.parse::<TaskStatus>().ok());
+    let status_filter = match &args.status {
+        Some(s) => Some(s.parse::<TaskStatus>().map_err(TodoError::Other)?),
+        None => None,
+    };
     let tag_filter = args.tag.as_deref();
     let stack_filter = args.stack.as_deref();
 

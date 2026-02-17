@@ -1,14 +1,31 @@
 # stackstodo
 
-A context-aware CLI task manager with a TUI interface — *stacks to do!* Tasks are stored as markdown files with YAML frontmatter in `~/.stackstodo/` (configurable via `$STACKSTODO_DIR`).
+**One person's entire workload, in one place.**
+
+Stackstodo is a context-aware CLI task manager designed for individual engineers, leads, and makers who juggle work across many projects, teams, and responsibilities. Tasks are plain markdown files with YAML frontmatter — no database, no server, no vendor lock-in.
+
+The core idea: your work doesn't live in one project. You might be debugging a production incident, reviewing a teammate's PR, prepping a conference talk, and planning next sprint — all in the same afternoon. Stackstodo uses **stacks** to separate these workstreams while keeping everything in a single, searchable task store that's trivial for AI tools to read, enrich, and act on.
+
+## Why This Exists
+
+Most task managers are built for teams or for single projects. Stackstodo is built for **you** — the individual who needs to:
+
+- Track work across 3-5 projects, team duties, and personal goals simultaneously
+- Create tasks from wherever you are (terminal, editor, scripts, AI agents)
+- Search across everything at once ("what was that security thing last week?")
+- Let AI tools triage, summarize, and report on your workload
+- Own your data as plain files you can grep, version, and back up
+
+The storage format is intentionally simple: one markdown file per task, human-readable, git-friendly, and easy for any tool to parse.
 
 ## Features
 
 - **TUI mode** — ratatui-based list+detail pane with filtering, sorting, keyboard navigation, task creation, and settings
-- **Headless CLI** — create, list, search, complete, delete, and debug context from scripts and pipelines
-- **Stacks** — organize tasks into named stacks (e.g. "work", "personal", "sprint-12")
+- **Headless CLI** — create, list, search, update, complete, delete from scripts and pipelines
+- **Stacks** — organize tasks into named workstreams (e.g. "atlas", "leadership", "bugs", "personal")
 - **Automatic context capture** — records git branch/commit, working directory, and project context on task creation
 - **Task graph** — subtasks, dependencies (blocked-by, blocks, related-to)
+- **AI-friendly storage** — plain markdown+YAML files that any LLM or script can read and write
 - **`.stackstodo-context` files** — define project-level context that gets attached to new tasks automatically
 - **Session chaining** — tracks the last task ID created per shell session via `$STACKSTODO_LAST_ID`
 - **Configurable storage** — set `$STACKSTODO_DIR` to relocate the task store (defaults to `~/.stackstodo/`)
@@ -159,7 +176,7 @@ Use `stackstodo context` to preview what would be captured without creating a ta
 
 ```bash
 cargo test                                     # unit tests
-cargo build && bash tests/smoke_test.sh        # CLI smoke tests (49 assertions)
+cargo build && bash tests/smoke_test.sh        # CLI smoke tests (76 assertions)
 ```
 
 The smoke test uses `$STACKSTODO_DIR` to write to a local `tests/.test-data/` directory — it never touches `~/.stackstodo/`.

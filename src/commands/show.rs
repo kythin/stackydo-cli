@@ -1,10 +1,18 @@
 use crate::cli::args::ShowArgs;
+use crate::commands::util::print_json;
 use crate::error::Result;
+use crate::model::task::TaskJson;
 use crate::storage::task_store::TaskStore;
 
 pub fn execute(args: &ShowArgs) -> Result<()> {
     let store = TaskStore::new();
     let task = resolve_task_pub(&store, &args.id)?;
+
+    if args.json {
+        let json_task = TaskJson::from(&task);
+        return print_json(&json_task);
+    }
+
     let fm = &task.frontmatter;
 
     println!("ID:       {}", fm.id);
@@ -102,7 +110,7 @@ pub fn resolve_task_pub(store: &TaskStore, id_or_prefix: &str) -> crate::error::
 
     match matches.len() {
         0 => Err(crate::error::TodoError::TaskNotFound(id_or_prefix.into())),
-        1 => Ok(matches.into_iter().next().unwrap()),
+        1 => Ok(matches.into_iter().next().expect("len confirmed 1 item")),
         n => Err(crate::error::TodoError::Other(format!(
             "Ambiguous ID prefix '{id_or_prefix}': matches {n} tasks. Be more specific."
         ))),

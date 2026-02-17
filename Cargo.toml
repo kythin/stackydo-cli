@@ -10,8 +10,8 @@ name = "stackstodo"
 path = "src/main.rs"
 
 [[bin]]
-name = "todo"
-path = "src/main.rs"
+name = "stackstodo-mcp"
+path = "src/mcp_bin.rs"
 
 [dependencies]
 # CLI
@@ -45,5 +45,11 @@ dirs = "5.0"
 thiserror = "1.0"
 anyhow = "1.0"
 
+# MCP server
+rmcp = { version = "0.15", features = ["server", "transport-io"] }
+schemars = { version = "1.0", features = ["chrono04"] }
+tokio = { version = "1", features = ["full"] }
+
 [dev-dependencies]
 tempfile = "3.8"
+proptest = "1.4"

@@ -499,6 +499,161 @@ assert_contains "$BULK_AFTER" "No tasks found" "bulk delete: all tasks deleted"
 # Summary
 # ════════════════════════════════════════════════════════════════════════
 
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 15: JSON output (--json flag)
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 15: JSON output"
+
+assert_json_valid() {
+    local output="$1" label="$2"
+    if echo "$output" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+        pass "$label"
+    else
+        fail "$label" "Output is not valid JSON"
+    fi
+}
+
+# list --json
+LIST_JSON=$($TODO_BIN list --json 2>&1)
+assert_json_valid "$LIST_JSON" "list --json: valid JSON"
+LIST_JSON_COUNT=$(echo "$LIST_JSON" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null)
+if [[ "$LIST_JSON_COUNT" -gt 0 ]]; then
+    pass "list --json: returns array with items"
+else
+    fail "list --json: returns array with items" "Got $LIST_JSON_COUNT items"
+fi
+
+# show --json
+SHOW_JSON=$($TODO_BIN show "$ID1" --json 2>&1)
+assert_json_valid "$SHOW_JSON" "show --json: valid JSON"
+assert_contains "$SHOW_JSON" '"Buy groceries"' "show --json: contains title"
+
+# search --json
+SEARCH_JSON=$($TODO_BIN search "groceries" --json 2>&1)
+assert_json_valid "$SEARCH_JSON" "search --json: valid JSON"
+assert_contains "$SEARCH_JSON" '"Buy groceries"' "search --json: contains matching title"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 16: --note on update
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 16: --note on update"
+
+ID_NOTE=$($TODO_BIN create --title "Note test task" 2>&1)
+$TODO_BIN update "$ID_NOTE" --note "First progress update" >/dev/null 2>&1
+OUT_NOTE=$($TODO_BIN show "$ID_NOTE" 2>&1)
+assert_contains "$OUT_NOTE" "First progress update" "note: text appears in body"
+# Timestamp format: [YYYY-MM-DD HH:MM]
+if echo "$OUT_NOTE" | grep -qF "[20"; then
+    pass "note: timestamp prefix present"
+else
+    fail "note: timestamp prefix present" "Expected [20 in output"
+fi
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 17: Due date filters
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 17: Due date filters"
+
+# Create a task with a past due date (overdue)
+ID_OVERDUE=$($TODO_BIN create --title "Overdue task" --due "2025-01-01" 2>&1)
+# Create a task with a future due date
+ID_FUTURE=$($TODO_BIN create --title "Future task" --due "2099-12-31" 2>&1)
+
+# --overdue
+OVERDUE_OUT=$($TODO_BIN list --overdue 2>&1)
+assert_contains "$OVERDUE_OUT" "Overdue task" "list --overdue: finds overdue task"
+assert_not_contains "$OVERDUE_OUT" "Future task" "list --overdue: excludes future task"
+
+# --due-before
+DUE_BEFORE=$($TODO_BIN list --due-before "2026-01-01" 2>&1)
+assert_contains "$DUE_BEFORE" "Overdue task" "list --due-before: finds past due"
+
+# --due-after
+DUE_AFTER=$($TODO_BIN list --due-after "2090-01-01" 2>&1)
+assert_contains "$DUE_AFTER" "Future task" "list --due-after: finds future task"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 18: Group-by stack
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 18: Group-by stack"
+
+GROUP_OUT=$($TODO_BIN list --group-by stack 2>&1)
+assert_contains "$GROUP_OUT" "[work]" "group-by stack: work header"
+assert_contains "$GROUP_OUT" "[ops]" "group-by stack: ops header"
+assert_contains "$GROUP_OUT" "total" "group-by stack: total footer"
+
+GROUP_JSON=$($TODO_BIN list --group-by stack --json 2>&1)
+assert_json_valid "$GROUP_JSON" "group-by stack --json: valid JSON"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 19: Stats command
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 19: Stats command"
+
+STATS=$($TODO_BIN stats 2>&1)
+assert_contains "$STATS" "Total tasks:" "stats: shows total"
+assert_contains "$STATS" "By status:" "stats: shows by_status"
+assert_contains "$STATS" "By stack:" "stats: shows by_stack"
+
+STATS_JSON=$($TODO_BIN stats --json 2>&1)
+assert_json_valid "$STATS_JSON" "stats --json: valid JSON"
+assert_contains "$STATS_JSON" '"total"' "stats --json: has total field"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 20: Stacks command
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 20: Stacks command"
+
+STACKS=$($TODO_BIN stacks 2>&1)
+assert_contains "$STACKS" "work:" "stacks: work listed"
+assert_contains "$STACKS" "ops:" "stacks: ops listed"
+
+STACKS_JSON=$($TODO_BIN stacks --json 2>&1)
+assert_json_valid "$STACKS_JSON" "stacks --json: valid JSON"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 21: Init command
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 21: Init command"
+
+INIT_DIR=$(mktemp -d)
+INIT_OUT=$($TODO_BIN init --yes --dir "$INIT_DIR/new-workspace" 2>&1)
+assert_contains "$INIT_OUT" "initialized" "init --yes: reports initialized"
+if [[ -f "$INIT_DIR/new-workspace/manifest.json" ]]; then
+    pass "init: manifest.json created"
+else
+    fail "init: manifest.json created"
+fi
+
+# Init with --git
+INIT_GIT_DIR=$(mktemp -d)
+INIT_GIT_OUT=$($TODO_BIN init --yes --git --dir "$INIT_GIT_DIR/git-workspace" 2>&1)
+if [[ -d "$INIT_GIT_DIR/git-workspace/.git" ]]; then
+    pass "init --git: .git directory created"
+else
+    fail "init --git: .git directory created"
+fi
+rm -rf "$INIT_DIR" "$INIT_GIT_DIR"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 22: Import command
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 22: Import command"
+
+IMPORT_OUT=$(echo '[{"title":"Imported task 1","priority":"high","tags":["import"],"stack":"imports"},{"title":"Imported task 2","body":"Some body"}]' | $TODO_BIN import 2>&1)
+assert_contains "$IMPORT_OUT" "Imported 2 task" "import: reports 2 imported"
+
+# Verify imported tasks exist
+IMPORT_LIST=$($TODO_BIN list --stack imports 2>&1)
+assert_contains "$IMPORT_LIST" "Imported task 1" "import: task 1 findable by stack"
+
+IMPORT_SEARCH=$($TODO_BIN search "Imported task 2" 2>&1)
+assert_contains "$IMPORT_SEARCH" "Imported task 2" "import: task 2 searchable"
+
+# ════════════════════════════════════════════════════════════════════════
+# Summary
+# ════════════════════════════════════════════════════════════════════════
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Results: $PASS passed, $FAIL failed ($TESTS_RUN total)"

@@ -53,8 +53,8 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
             // Use first line of body if no explicit title
             body.lines().next().map(|l| {
                 let t = l.trim();
-                if t.len() > 80 {
-                    format!("{}...", &t[..77])
+                if t.chars().count() > 80 {
+                    format!("{}...", t.chars().take(77).collect::<String>())
                 } else {
                     t.to_string()
                 }
@@ -85,14 +85,18 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
             .filter(|s| !s.is_empty())
             .collect();
         // Register tags in manifest
-        let _ = manifest_store.register_tags(&tags);
+        if let Err(e) = manifest_store.register_tags(&tags) {
+            eprintln!("Warning: failed to register tags in manifest: {e}");
+        }
         task.frontmatter.tags = tags;
     }
 
     if let Some(ref stack) = args.stack {
         let stack = stack.trim().to_string();
         if !stack.is_empty() {
-            let _ = manifest_store.register_stack(&stack);
+            if let Err(e) = manifest_store.register_stack(&stack) {
+                eprintln!("Warning: failed to register stack in manifest: {e}");
+            }
             task.frontmatter.stack = Some(stack);
         }
     }

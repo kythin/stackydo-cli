@@ -175,6 +175,44 @@ pub struct Task {
     pub body: String,
 }
 
+/// JSON-friendly representation of a task (flat frontmatter + body).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskJson {
+    #[serde(flatten)]
+    pub frontmatter: TaskFrontmatter,
+    pub body: String,
+}
+
+impl From<&Task> for TaskJson {
+    fn from(task: &Task) -> Self {
+        Self {
+            frontmatter: task.frontmatter.clone(),
+            body: task.body.clone(),
+        }
+    }
+}
+
+impl From<Task> for TaskJson {
+    fn from(task: Task) -> Self {
+        Self {
+            frontmatter: task.frontmatter,
+            body: task.body,
+        }
+    }
+}
+
+/// Input format for importing tasks.
+#[derive(Debug, Deserialize)]
+pub struct TaskImportInput {
+    pub title: String,
+    pub priority: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub stack: Option<String>,
+    pub body: Option<String>,
+    pub due: Option<String>,
+    pub status: Option<String>,
+}
+
 impl Task {
     /// Create a new task with sensible defaults.
     pub fn new(id: String, title: String, working_dir: String) -> Self {

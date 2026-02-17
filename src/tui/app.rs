@@ -184,6 +184,12 @@ pub struct App {
     pub settings_field: SettingsField,
 }
 
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl App {
     pub fn new() -> Self {
         // Capture context from CWD
@@ -254,7 +260,7 @@ impl App {
         if let Some(ref query) = self.search_query {
             let q = query.to_lowercase();
             indices.retain(|&i| {
-                let t = &self.all_tasks[*&i];
+                let t = &self.all_tasks[i];
                 t.frontmatter.title.to_lowercase().contains(&q)
                     || t.body.to_lowercase().contains(&q)
             });
@@ -409,7 +415,9 @@ impl App {
             .collect();
         if !tags.is_empty() {
             let manifest_store = ManifestStore::new();
-            let _ = manifest_store.register_tags(&tags);
+            if let Err(e) = manifest_store.register_tags(&tags) {
+                eprintln!("Warning: failed to register tags in manifest: {e}");
+            }
         }
         task.frontmatter.tags = tags;
 
@@ -417,7 +425,9 @@ impl App {
         let stack = self.create_state.stack.trim().to_string();
         if !stack.is_empty() {
             let manifest_store = ManifestStore::new();
-            let _ = manifest_store.register_stack(&stack);
+            if let Err(e) = manifest_store.register_stack(&stack) {
+                eprintln!("Warning: failed to register stack in manifest: {e}");
+            }
             task.frontmatter.stack = Some(stack);
         }
 
