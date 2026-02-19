@@ -1,0 +1,96 @@
+name: Patch Homebrew Formula
+on:
+  release:
+    types: [published]
+jobs:
+  patch-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: kythin/homebrew-stackydo
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Patch formula for private repo downloads
+        run: |
+          FORMULA="tap/Formula/stackydo.rb"
+          if [ ! -f "$FORMULA" ]; then
+            FORMULA="tap/stackydo.rb"
+          fi
+          if [ ! -f "$FORMULA" ]; then
+            echo "Formula not found, listing tap contents:"
+            find tap -name "*.rb" -type f
+            exit 1
+          fi
+
+          # Replace standard url lines with block-based URL that uses GitHub API credentials
+          # This handles private repo release asset downloads via HOMEBREW_GITHUB_API_TOKEN
+          python3 << 'PYEOF'
+          import re, sys
+
+          formula_path = None
+          import glob
+          for f in glob.glob("tap/**/*.rb", recursive=True):
+              formula_path = f
+              break
+          if not formula_path:
+              print("No .rb formula found")
+              sys.exit(1)
+
+          with open(formula_path) as f:
+              content = f.read()
+
+          owner = "kythin"
+          repo = "stackydo-cli"
+
+          # Pattern: url "https://github.com/owner/repo/releases/download/VERSION/FILENAME"
+          url_pattern = r'(\s+)url "https://github\.com/' + re.escape(owner) + r'/' + re.escape(repo) + r'/releases/download/([^/]+)/([^"]+)"'
+
+          def replace_url(match):
+              indent = match.group(1)
+              tag = match.group(2)
+              filename = match.group(3)
+              return f'''{indent}url do
+          {indent}  require "utils/github/api"
+          {indent}  owner = "{owner}"
+          {indent}  repo = "{repo}"
+          {indent}  tag = "{tag}"
+          {indent}  filename = "{filename}"
+          {indent}  url = "https://api.github.com/repos/#{{owner}}/#{{repo}}/releases/tags/#{{tag}}"
+          {indent}  headers = {{ "Accept" => "application/vnd.github+json" }}
+          {indent}  token = GitHub::API.credentials
+          {indent}  headers["Authorization"] = "bearer #{{token}}" if token
+          {indent}  response = JSON.parse(curl_output("--fail", "--silent", *headers.flat_map {{ |k, v| ["-H", "#{{k}}: #{{v}}"] }}, url).first)
+          {indent}  asset = response["assets"].find {{ |a| a["name"] == filename }}
+          {indent}  raise "Asset #{{filename}} not found in release #{{tag}}" unless asset
+          {indent}  asset_url = asset["url"]
+          {indent}  odie "Asset URL not found" unless asset_url
+          {indent}  url asset_url, headers: {{ "Accept" => "application/octet-stream", "Authorization" => "bearer #{{token}}" }}
+          {indent}end'''
+
+          new_content = re.sub(url_pattern, replace_url, content)
+
+          if new_content == content:
+              print("No URL patterns matched — formula may already be patched or has unexpected format")
+              print("Formula content:")
+              print(content[:2000])
+              sys.exit(0)
+
+          with open(formula_path, "w") as f:
+              f.write(new_content)
+
+          print(f"Patched {formula_path}")
+          PYEOF
+      - name: Push patched formula
+        working-directory: tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Patch formula for private repo download strategy"
+            git push
+          fi

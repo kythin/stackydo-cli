@@ -303,7 +303,7 @@ mod proptest_tests {
             |(y, m, d, h, min)| {
                 Utc.with_ymd_and_hms(y, m, d, h, min, 0)
                     .single()
-                    .unwrap_or_else(|| Utc::now())
+                    .unwrap_or_else(Utc::now)
             },
         )
     }
