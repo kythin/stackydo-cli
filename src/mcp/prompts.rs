@@ -12,10 +12,10 @@ use crate::storage::task_store::TaskStore;
 use chrono::Utc;
 use std::collections::BTreeMap;
 
-use super::StackstodoMcp;
+use super::StackydoMcp;
 
-pub fn create_prompt_router() -> rmcp::handler::server::router::prompt::PromptRouter<StackstodoMcp> {
-    StackstodoMcp::prompt_router()
+pub fn create_prompt_router() -> rmcp::handler::server::router::prompt::PromptRouter<StackydoMcp> {
+    StackydoMcp::prompt_router()
 }
 
 // ── Prompt parameter structs ──
@@ -133,7 +133,7 @@ fn load_recent_tasks_json() -> String {
 // ── Prompt implementations ──
 
 #[prompt_router]
-impl StackstodoMcp {
+impl StackydoMcp {
     #[rmcp::prompt(
         name = "triage",
         description = "Review all open tasks and suggest priority/status changes. Flags overdue items."
@@ -160,7 +160,7 @@ impl StackstodoMcp {
 
     #[rmcp::prompt(
         name = "plan_work",
-        description = "Break a goal into actionable stackstodo tasks. Takes a goal description as input."
+        description = "Break a goal into actionable stackydo tasks. Takes a goal description as input."
     )]
     async fn plan_work(&self, Parameters(params): Parameters<PlanWorkParams>) -> GetPromptResult {
         let stats = load_stats_summary();
@@ -172,7 +172,7 @@ impl StackstodoMcp {
                 PromptMessage::new_text(
                     PromptMessageRole::User,
                     format!(
-                        "Break this goal into actionable tasks that I can create in stackstodo. \
+                        "Break this goal into actionable tasks that I can create in stackydo. \
                          Use existing stacks/tags where appropriate, or suggest new ones.\n\n\
                          ## Goal\n{}\n\n\
                          ## Current Context\n{stats}\n\n{stacks_tags}\n\n\
@@ -228,7 +228,7 @@ impl StackstodoMcp {
                 PromptMessage::new_text(
                     PromptMessageRole::User,
                     format!(
-                        "Extract actionable items from the following text and create stackstodo tasks for each one. \
+                        "Extract actionable items from the following text and create stackydo tasks for each one. \
                          Use existing stacks and tags where they fit.\n\n\
                          ## Available Context\n{stacks_tags}\n\n\
                          ## Text to Process\n{}\n\n\

@@ -11,10 +11,10 @@ use crate::storage::task_store::TaskStore;
 use chrono::Utc;
 use std::collections::BTreeMap;
 
-use super::StackstodoMcp;
+use super::StackydoMcp;
 
-pub fn create_tool_router() -> rmcp::handler::server::router::tool::ToolRouter<StackstodoMcp> {
-    StackstodoMcp::tool_router()
+pub fn create_tool_router() -> rmcp::handler::server::router::tool::ToolRouter<StackydoMcp> {
+    StackydoMcp::tool_router()
 }
 
 // ── Parameter structs ──
@@ -134,7 +134,7 @@ fn err_to_string(e: impl std::fmt::Display) -> String {
 // ── Tool implementations ──
 
 #[tool_router]
-impl StackstodoMcp {
+impl StackydoMcp {
     #[rmcp::tool(description = "List tasks with optional filters and sorting. Returns JSON array of tasks, or grouped object when group_by is specified.")]
     fn list_tasks(
         &self,

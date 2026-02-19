@@ -8,7 +8,7 @@ This scenario tests the **stacks** concept by creating tasks across multiple sta
 
 ## How to Run
 
-Each agent should use the `stackstodo` CLI (at `./target/release/stackstodo`) with `STACKSTODO_DIR` set to a temp directory. Agents should:
+Each agent should use the `stackydo` CLI (at `./target/release/stackydo`) with `STACKYDO_DIR` set to a temp directory. Agents should:
 
 1. Create tasks as they "discover" work throughout the simulated month
 2. Use stacks to organize by project/workstream

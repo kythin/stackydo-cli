@@ -1,10 +1,10 @@
 use rmcp::model::{Annotated, RawResource, Resource};
 
-pub const GUIDE_CONTENT: &str = r#"# Stackstodo Agent Guide
+pub const GUIDE_CONTENT: &str = r#"# Stackydo Agent Guide
 
-## What is Stackstodo?
+## What is Stackydo?
 
-Stackstodo is a personal workload manager for one individual across all projects. Tasks are stored as flat markdown files with YAML frontmatter in `~/.stackstodo/` (overridable via `$STACKSTODO_DIR`). No database — just files.
+Stackydo is a personal workload manager for one individual across all projects. Tasks are stored as flat markdown files with YAML frontmatter in `~/.stackydo/` (overridable via `$STACKYDO_DIR`). No database — just files.
 
 ## Core Concepts
 
@@ -40,7 +40,7 @@ Many tags per task. Comma-separated. Good for filtering across stacks.
 - **related_to** — loose association
 
 ### Context
-Auto-captured at creation: git branch, remote, commit, working directory. Also discovers `.stackstodo-context` files by walking up from CWD.
+Auto-captured at creation: git branch, remote, commit, working directory. Also discovers `.stackydo-context` files by walking up from CWD.
 
 ## When to Create Tasks
 
@@ -94,11 +94,11 @@ Low-priority captures for later review. Dedicated `ideas` stack or personal stac
 pub fn guide_resource() -> Resource {
     Annotated::new(
         RawResource {
-            uri: "stackstodo://guide".into(),
-            name: "Stackstodo Agent Guide".into(),
+            uri: "stackydo://guide".into(),
+            name: "Stackydo Agent Guide".into(),
             title: None,
             description: Some(
-                "Comprehensive guide for AI agents on how to use stackstodo effectively".into(),
+                "Comprehensive guide for AI agents on how to use stackydo effectively".into(),
             ),
             mime_type: Some("text/markdown".into()),
             size: None,

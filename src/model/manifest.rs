@@ -37,7 +37,7 @@ impl Default for ManifestSettings {
     }
 }
 
-/// Root manifest stored at ~/.stackstodo/manifest.json.
+/// Root manifest stored at ~/.stackydo/manifest.json.
 /// Tracks tags, stacks, settings, and feature flags.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {

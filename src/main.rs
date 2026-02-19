@@ -1,7 +1,7 @@
 use clap::Parser;
-use stackstodo::cli::args::{Cli, Commands};
-use stackstodo::commands;
-use stackstodo::storage::paths::TodoPaths;
+use stackydo::cli::args::{Cli, Commands};
+use stackydo::commands;
+use stackydo::storage::paths::TodoPaths;
 
 fn main() {
     // Ensure storage directory exists
@@ -14,7 +14,7 @@ fn main() {
 
     let result = match cli.command {
         // No subcommand → launch TUI
-        None => stackstodo::tui::run(),
+        None => stackydo::tui::run(),
 
         Some(Commands::Create(ref args)) => {
             commands::create::execute(args).map(|_| ())

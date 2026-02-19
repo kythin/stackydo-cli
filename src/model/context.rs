@@ -13,7 +13,7 @@ pub struct DirectoryContext {
     pub git: Option<GitContext>,
 }
 
-/// Contents of a discovered .stackstodo-context file
+/// Contents of a discovered .stackydo-context file
 #[derive(Debug, Clone)]
 pub struct TodoContextFile {
     pub path: String,

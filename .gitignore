@@ -1,8 +1,8 @@
 /target
-Cargo.lock
 *.swp
 *.swo
 *~
 .DS_Store
 tests/.test-data/
 firebase-debug.log
+.stackydo-workspace/

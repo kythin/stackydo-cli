@@ -146,7 +146,7 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
     store.save(&task)?;
 
     // Print for shell integration
-    // Users can do: export STACKSTODO_LAST_ID=$(stackstodo create --title "..." -- body)
+    // Users can do: export STACKYDO_LAST_ID=$(stackydo create --title "..." -- body)
     println!("{id}");
 
     Ok(id)

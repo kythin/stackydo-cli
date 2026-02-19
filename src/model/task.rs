@@ -124,7 +124,7 @@ pub struct ContextInfo {
     /// Working directory at creation time
     pub working_dir: String,
 
-    /// Content from nearest .stackstodo-context file
+    /// Content from nearest .stackydo-context file
     #[serde(skip_serializing_if = "Option::is_none")]
     pub todo_context_content: Option<String>,
 

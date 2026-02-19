@@ -12,12 +12,12 @@ use rmcp::{
 };
 
 #[derive(Debug, Clone)]
-pub struct StackstodoMcp {
+pub struct StackydoMcp {
     tool_router: ToolRouter<Self>,
     prompt_router: PromptRouter<Self>,
 }
 
-impl StackstodoMcp {
+impl StackydoMcp {
     pub fn new() -> Self {
         Self {
             tool_router: tools::create_tool_router(),
@@ -26,7 +26,7 @@ impl StackstodoMcp {
     }
 }
 
-impl Default for StackstodoMcp {
+impl Default for StackydoMcp {
     fn default() -> Self {
         Self::new()
     }
@@ -34,11 +34,11 @@ impl Default for StackstodoMcp {
 
 #[tool_handler]
 #[prompt_handler]
-impl ServerHandler for StackstodoMcp {
+impl ServerHandler for StackydoMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             instructions: Some(
-                "Stackstodo: a personal task manager. Use the stackstodo://guide resource for full documentation."
+                "Stackydo: a personal task manager. Use the stackydo://guide resource for full documentation."
                     .into(),
             ),
             capabilities: ServerCapabilities::builder()
@@ -47,7 +47,7 @@ impl ServerHandler for StackstodoMcp {
                 .enable_prompts()
                 .build(),
             server_info: Implementation {
-                name: "stackstodo-mcp".into(),
+                name: "stackydo-mcp".into(),
                 version: env!("CARGO_PKG_VERSION").into(),
                 title: None,
                 description: None,
@@ -75,10 +75,10 @@ impl ServerHandler for StackstodoMcp {
         request: ReadResourceRequestParams,
         _context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> Result<ReadResourceResult, McpError> {
-        if request.uri == "stackstodo://guide" {
+        if request.uri == "stackydo://guide" {
             Ok(ReadResourceResult {
                 contents: vec![ResourceContents::TextResourceContents {
-                    uri: "stackstodo://guide".into(),
+                    uri: "stackydo://guide".into(),
                     mime_type: Some("text/markdown".into()),
                     text: resources::GUIDE_CONTENT.into(),
                     meta: None,

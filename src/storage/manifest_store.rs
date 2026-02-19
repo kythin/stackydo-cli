@@ -4,7 +4,7 @@ use crate::storage::paths::TodoPaths;
 use std::fs;
 use std::path::PathBuf;
 
-/// JSON-backed manifest store at ~/.stackstodo/manifest.json
+/// JSON-backed manifest store at ~/.stackydo/manifest.json
 pub struct ManifestStore {
     path: PathBuf,
 }

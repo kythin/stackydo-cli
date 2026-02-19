@@ -1,7 +1,7 @@
 use clap::{ArgAction, Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "stackstodo")]
+#[command(name = "stackydo")]
 #[command(version, about = "Context-aware task manager with TUI — stacks to do!")]
 pub struct Cli {
     #[command(subcommand)]
@@ -41,7 +41,7 @@ pub enum Commands {
     /// List all known stacks with per-stack status counts
     Stacks(StacksArgs),
 
-    /// Initialize a new stackstodo workspace
+    /// Initialize a new stackydo workspace
     Init(InitArgs),
 
     /// Import tasks from stdin (JSON or YAML)

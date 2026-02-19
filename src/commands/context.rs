@@ -10,7 +10,7 @@ pub fn execute() -> Result<()> {
     let result = dir_context::capture_full(&cwd);
     let ctx = &result.context;
 
-    println!("Context (would be captured on `stackstodo create`):");
+    println!("Context (would be captured on `stackydo create`):");
     println!();
     println!("  Working dir:     {}", ctx.working_dir);
 

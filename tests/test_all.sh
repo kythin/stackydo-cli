@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_all.sh — Run all test suites for stackstodo
+# test_all.sh — Run all test suites for stackydo
 #
 # Usage:
 #   bash tests/test_all.sh

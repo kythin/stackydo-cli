@@ -9,9 +9,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_DATA=$(mktemp -d)
-export STACKSTODO_DIR="$TEST_DATA"
+export STACKYDO_DIR="$TEST_DATA"
 
-TODO_BIN="$PROJECT_DIR/target/debug/stackstodo"
+TODO_BIN="$PROJECT_DIR/target/debug/stackydo"
 PASS=0
 FAIL=0
 TESTS_RUN=0
@@ -65,7 +65,7 @@ if [[ ! -x "$TODO_BIN" ]]; then
     exit 1
 fi
 
-echo "Using STACKSTODO_DIR=$TEST_DATA"
+echo "Using STACKYDO_DIR=$TEST_DATA"
 
 # ── Seed 200+ tasks ────────────────────────────────────────────────────
 

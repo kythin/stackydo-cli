@@ -5,7 +5,7 @@ use std::path::Path;
 /// Full capture result including metadata not stored on tasks (e.g. config file path).
 pub struct CaptureResult {
     pub context: ContextInfo,
-    /// Path to the `.stackstodo-context` config file that was loaded, if any.
+    /// Path to the `.stackydo-context` config file that was loaded, if any.
     pub config_file_path: Option<String>,
 }
 
@@ -24,7 +24,7 @@ pub fn capture_full(context_path: &Path) -> CaptureResult {
 
     let git = git_context::capture(context_path);
     let todo_ctx = todo_context::discover(context_path);
-    let session_prev = std::env::var("STACKSTODO_LAST_ID").ok();
+    let session_prev = std::env::var("STACKYDO_LAST_ID").ok();
 
     let config_file_path = todo_ctx.as_ref().map(|c| c.path.clone());
 

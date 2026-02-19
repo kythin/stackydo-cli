@@ -1,4 +1,4 @@
-# Stackstodo CLI Stress Test Report
+# Stackydo CLI Stress Test Report
 **Date:** 2026-02-13
 **Test Duration:** ~10 minutes
 **Test Type:** Multi-agent concurrent usage simulation
@@ -7,7 +7,7 @@
 ## Test Configuration
 
 ### Environment
-- **Binary:** `target/release/stackstodo`
+- **Binary:** `target/release/stackydo`
 - **Test Directory:** `/tmp/bathroom-reno-todo-test`
 - **Model:** Claude Haiku (all agents)
 - **Learning Method:** `--help` only (no documentation)
@@ -552,7 +552,7 @@ The agents successfully simulated authentic bathroom renovation workflows:
 
 ### Executive Summary
 
-The stackstodo CLI successfully passed a rigorous 10-minute stress test with 6 concurrent agents simulating realistic multi-trade project management. The tool demonstrated **excellent performance, reliability, and usability** with an average rating of **8.7/10 for ease of use** and **9.3/10 for speed**.
+The stackydo CLI successfully passed a rigorous 10-minute stress test with 6 concurrent agents simulating realistic multi-trade project management. The tool demonstrated **excellent performance, reliability, and usability** with an average rating of **8.7/10 for ease of use** and **9.3/10 for speed**.
 
 **Key Strengths:**
 - Production-ready core functionality
@@ -631,7 +631,7 @@ With Priority 1-2 features implemented, this tool would compete favorably with e
 **Test Directory:** `/tmp/bathroom-reno-todo-test`
 **Task Files Generated:** 49 ULID.md files
 **Manifest Updates:** Multiple concurrent writes successful
-**Context File:** `.stackstodo-context` properly loaded by all agents
+**Context File:** `.stackydo-context` properly loaded by all agents
 
 **Agent Activity Timeline:**
 - 07:42 - Test initialized, shared directory created

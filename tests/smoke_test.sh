@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# smoke_test.sh — Scripted smoke tests for the stackstodo CLI
+# smoke_test.sh — Scripted smoke tests for the stackydo CLI
 #
 # Usage:
 #   cargo build && bash tests/smoke_test.sh
 #
-# Uses STACKSTODO_DIR to isolate test data in tests/.test-data/ — never touches ~/.stackstodo.
+# Uses STACKYDO_DIR to isolate test data in tests/.test-data/ — never touches ~/.stackydo.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEST_DATA="$SCRIPT_DIR/.test-data"
-export STACKSTODO_DIR="$TEST_DATA"
+export STACKYDO_DIR="$TEST_DATA"
 
-TODO_BIN="$PROJECT_DIR/target/debug/stackstodo"
+TODO_BIN="$PROJECT_DIR/target/debug/stackydo"
 PASS=0
 FAIL=0
 TESTS_RUN=0
@@ -78,7 +78,7 @@ section() {
 setup() {
     rm -rf "$TEST_DATA"
     mkdir -p "$TEST_DATA"
-    echo "Using STACKSTODO_DIR=$TEST_DATA"
+    echo "Using STACKYDO_DIR=$TEST_DATA"
 }
 
 teardown() {

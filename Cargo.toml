@@ -1,16 +1,20 @@
 [package]
-name = "stackstodo"
+name = "stackydo"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.70"
-description = "Context-aware CLI task manager with TUI — stacks to do!"
+description = "Context-aware CLI task manager with TUI — stacky do!"
+license = "MIT"
+repository = "https://github.com/kythin/stackydo-cli"
+homepage = "https://github.com/kythin/stackydo-cli"
+readme = "README.md"
 
 [[bin]]
-name = "stackstodo"
+name = "stackydo"
 path = "src/main.rs"
 
 [[bin]]
-name = "stackstodo-mcp"
+name = "stackydo-mcp"
 path = "src/mcp_bin.rs"
 
 [dependencies]
@@ -34,7 +38,7 @@ chrono-tz = "0.8"
 ulid = "1.1"
 
 # Git
-git2 = "0.18"
+git2 = { version = "0.18", features = ["vendored-libgit2", "vendored-openssl"] }
 
 # Filesystem & patterns
 walkdir = "2.4"
@@ -53,3 +57,8 @@ tokio = { version = "1", features = ["full"] }
 [dev-dependencies]
 tempfile = "3.8"
 proptest = "1.4"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

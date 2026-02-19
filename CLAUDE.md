@@ -1,8 +1,10 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## Project Overview
 
-`stackstodo` is a context-aware CLI task manager written in Rust. Tasks are stored as individual markdown files with YAML frontmatter in `~/.stackstodo/` (overridable via `$STACKSTODO_DIR`). It supports both a ratatui-based TUI (default) and headless CLI commands. Binaries: `stackstodo` (primary) and `todo` (alias).
+`stackydo` is a context-aware CLI task manager written in Rust. Tasks are stored as individual markdown files with YAML frontmatter in `~/.stackydo/` (overridable via `$STACKYDO_DIR`). It supports a ratatui-based TUI (default), headless CLI commands, and an MCP server. Binaries: `stackydo` (primary/TUI+CLI), `stackydo-mcp` (MCP server over stdio).
 
 ## Build & Run
 
@@ -14,7 +16,6 @@ cargo run -- list
 cargo run -- list --stack work
 cargo run -- search "query"
 cargo run -- context   # debug: show what context would be captured
-cargo test
 cargo clippy
 ```
 
@@ -22,34 +23,39 @@ cargo clippy
 
 ```bash
 cargo test                                # unit tests (in-module #[cfg(test)])
-cargo build && bash tests/smoke_test.sh   # CLI smoke tests (49 assertions)
+cargo test test_name                      # run a single test by name
+cargo build && bash tests/smoke_test.sh   # CLI smoke tests
+bash tests/test_all.sh                    # full suite: clippy + unit + build + smoke + scenario + scale
 ```
 
-The smoke test sets `STACKSTODO_DIR=tests/.test-data/` so it never touches `~/.stackstodo/`. The test data directory is gitignored and cleaned up automatically.
-
-Unit tests use `tempfile` crate for filesystem isolation.
+The smoke test sets `STACKYDO_DIR=tests/.test-data/` so it never touches `~/.stackydo/`. Unit tests use `tempfile` crate for filesystem isolation.
 
 ## Architecture
 
+- **`src/main.rs`** — CLI entrypoint: parses clap args, dispatches to command handlers or launches TUI when no subcommand given
+- **`src/mcp_bin.rs`** — MCP server entrypoint: runs `StackydoMcp` over stdio transport using rmcp
 - **`src/model/`** — Core types: `Task`, `TaskFrontmatter`, `Manifest`, `ContextInfo`, status/priority/dependency enums
-- **`src/storage/`** — Filesystem persistence: markdown+YAML task files, JSON manifest, path resolution
-- **`src/context/`** — Auto-capture: git info (git2), `.stackstodo-context` file discovery, directory context
-- **`src/cli/`** — clap derive argument definitions
-- **`src/commands/`** — Headless command implementations (create, list, show, complete, delete, search, context)
-- **`src/tui/`** — ratatui TUI: app state, 40/60 split layout, keybinding handler, widgets
+- **`src/storage/`** — Filesystem persistence: markdown+YAML task files (`TaskStore`), JSON manifest (`ManifestStore`), path resolution (`TodoPaths`)
+- **`src/context/`** — Auto-capture: git info via git2 (`git_context`), `.stackydo-context` file discovery (`dir_context`), combined capture (`todo_context`)
+- **`src/cli/`** — clap derive argument definitions (`args.rs`)
+- **`src/commands/`** — Headless command implementations: create, list, show, update, complete, delete, search, context, stats, stacks, init, import
+- **`src/tui/`** — ratatui TUI: app state (`app.rs`), 40/60 split layout (`ui.rs`), keybinding handler (`handler.rs`), widgets (`widgets/`)
+- **`src/mcp/`** — MCP server: tool definitions (`tools.rs`), prompt templates (`prompts.rs`), resource definitions (`resources.rs`)
 - **`src/error.rs`** — `TodoError` enum using thiserror
 
 ## Key Design Decisions
 
-- Tasks are flat files: `<STACKSTODO_DIR>/<ULID>.md` — no database
-- `$STACKSTODO_DIR` env var overrides the default `~/.stackstodo/` storage root; all path resolution goes through `TodoPaths::root()`
+- Tasks are flat files: `<STACKYDO_DIR>/<ULID>.md` — no database
+- `$STACKYDO_DIR` env var overrides the default `~/.stackydo/` storage root; all path resolution goes through `TodoPaths::root()`
 - ULIDs for IDs (time-sortable, unique)
 - All dates stored as UTC, displayed in local timezone
-- YAML frontmatter is managed by the tool; body content is freeform
-- `.stackstodo-context` files discovered by walking up from CWD, fallback `~/.stackstodo-context`
-- `$STACKSTODO_LAST_ID` env var chains tasks created in the same shell session
+- YAML frontmatter is managed by the tool; body content is freeform markdown
+- `.stackydo-context` files discovered by walking up from CWD, fallback `~/.stackydo-context`
+- `$STACKYDO_LAST_ID` env var chains tasks created in the same shell session
 - Task graph: subtasks (parent_id/subtask_ids) + dependencies (blocked_by, blocks, related_to)
 - **Stacks**: each task has an optional `stack: Option<String>` field (one stack per task); manifest tracks known stack names
+- Storage layer uses concrete types (not trait objects) — `TaskStore`, `ManifestStore`
+- Task ID resolution supports prefix matching (e.g. `stackydo show 01HQ` matches the full ULID)
 
 ## TUI Modes
 
@@ -64,6 +70,33 @@ State lives in `tui::app::App`; rendering in `tui::ui`; key handling in `tui::ha
 ## Conventions
 
 - Error handling: `thiserror` for domain errors, `anyhow` available for ad-hoc use
-- Storage layer uses concrete types (not trait objects) for simplicity — `TaskStore`, `ManifestStore`
-- Task ID resolution supports prefix matching (e.g. `stackstodo show 01HQ` matches the full ULID)
 - `dir_context::capture_full()` returns `CaptureResult` (context + config file path); `capture()` is the shorthand returning just `ContextInfo`
+- MCP server uses rmcp with `#[tool_handler]` and `#[prompt_handler]` proc macros on the `ServerHandler` impl
+
+## Dogfooding
+
+This project has a workspace-local task store at `.stackydo-workspace/` (gitignored). AI agents working on this codebase should use stackydo to track their own work. All commands use the `STACKYDO_DIR` env var to target the local workspace:
+
+```bash
+STD=".stackydo-workspace"  # shorthand for examples below
+
+# Create a task for the work you're about to do
+STACKYDO_DIR=$STD cargo run -- create --title "Implement feature X" --stack dev -- Description of the work
+
+# Log progress with timestamped notes
+STACKYDO_DIR=$STD cargo run -- update <ID> --note "Added tests, found edge case in parser"
+
+# Mark done when finished
+STACKYDO_DIR=$STD cargo run -- complete <ID>
+
+# Check what's in the workspace
+STACKYDO_DIR=$STD cargo run -- list --stack dev
+```
+
+**When to use it**: Non-trivial, multi-step work (features, refactors, bug investigations). Don't bother for one-line fixes.
+
+**When something goes wrong**: If a stackydo command fails, returns wrong data, panics, or behaves unexpectedly while you're using it:
+
+1. **Interactive session** — Tell the user immediately. They need to know.
+2. **Can use `gh`** — File an issue: `gh issue create --title "Bug: ..." --body "..."`
+3. **Fallback** — Write a bug report to `bugs/<YYYY-MM-DD>-<short-slug>.md` in the repo root (create `bugs/` if needed). Include: what you ran, what happened, what you expected, and any error output.

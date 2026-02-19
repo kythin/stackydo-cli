@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# run.sh — Reusable scenario runner for stackstodo CLI testing
+# run.sh — Reusable scenario runner for stackydo CLI testing
 #
 # Usage:
 #   bash tests/scenarios/run.sh [scenario_name]
 #
-# Creates a temp STACKSTODO_DIR, runs commands, tracks IDs, asserts on output.
+# Creates a temp STACKYDO_DIR, runs commands, tracks IDs, asserts on output.
 # Designed for scripted scenario validation.
 
 set -euo pipefail
@@ -12,9 +12,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEST_DATA=$(mktemp -d)
-export STACKSTODO_DIR="$TEST_DATA"
+export STACKYDO_DIR="$TEST_DATA"
 
-TODO_BIN="$PROJECT_DIR/target/debug/stackstodo"
+TODO_BIN="$PROJECT_DIR/target/debug/stackydo"
 PASS=0
 FAIL=0
 TESTS_RUN=0
@@ -92,7 +92,7 @@ if [[ ! -x "$TODO_BIN" ]]; then
     exit 1
 fi
 
-echo "Using STACKSTODO_DIR=$TEST_DATA"
+echo "Using STACKYDO_DIR=$TEST_DATA"
 
 # ── Seed data ───────────────────────────────────────────────────────────
 
