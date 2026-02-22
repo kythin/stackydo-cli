@@ -1,16 +1,20 @@
 name: Update Homebrew Tap
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
 jobs:
   update-tap:
+    # Only run when Release workflow succeeded on a version tag
+    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') }}
     runs-on: ubuntu-latest
     steps:
       - name: Download release archives from source repo
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ github.event.workflow_run.head_branch }}"
           gh release download "$VERSION" \
             --repo kythin/stackydo-cli \
             --pattern "*.tar.xz" \
@@ -20,7 +24,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_BETA_TOKEN }}
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ github.event.workflow_run.head_branch }}"
           CLEAN_VERSION="${VERSION#v}"
           TAP_TAG="stackydo-${VERSION}"
 
