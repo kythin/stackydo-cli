@@ -14,9 +14,8 @@ jobs:
 
     steps:
       - name: Resolve version
-        id: resolve
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_PUBLIC_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_BETA_TOKEN }}
         run: |
           VERSION="${{ github.event.inputs.version }}"
           if [ -z "$VERSION" ]; then
@@ -25,40 +24,49 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Promoting version: $VERSION"
 
-      - name: Download release artifacts
+      - name: Download binaries from beta tap release
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_PUBLIC_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_BETA_TOKEN }}
         run: |
-          gh release download "$VERSION" \
-            --repo kythin/stackydo-cli \
+          TAP_BETA_TAG="stackydo-${VERSION}"
+          gh release download "$TAP_BETA_TAG" \
+            --repo kythin/homebrew-tap-beta \
             --pattern "*.tar.xz" \
             --dir artifacts
 
-      - name: Generate and push formula to public tap
+      - name: Upload binaries to public tap release and update formula
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_PUBLIC_TOKEN }}
         run: |
           CLEAN_VERSION="${VERSION#v}"
+          TAP_TAG="stackydo-${VERSION}"
 
-          # Compute SHAs from the downloaded artifacts
+          # Compute SHAs
           SHA_ARM_MAC=$(sha256sum artifacts/stackydo-aarch64-apple-darwin.tar.xz | cut -d ' ' -f 1)
           SHA_INTEL_MAC=$(sha256sum artifacts/stackydo-x86_64-apple-darwin.tar.xz | cut -d ' ' -f 1)
           SHA_ARM_LINUX=$(sha256sum artifacts/stackydo-aarch64-unknown-linux-gnu.tar.xz | cut -d ' ' -f 1)
           SHA_INTEL_LINUX=$(sha256sum artifacts/stackydo-x86_64-unknown-linux-gnu.tar.xz | cut -d ' ' -f 1)
 
-          echo "aarch64-apple-darwin: ${SHA_ARM_MAC}"
-          echo "x86_64-apple-darwin: ${SHA_INTEL_MAC}"
-          echo "aarch64-unknown-linux-gnu: ${SHA_ARM_LINUX}"
-          echo "x86_64-unknown-linux-gnu: ${SHA_INTEL_LINUX}"
+          # Create release in public tap (or upload to existing)
+          if gh release view "$TAP_TAG" --repo kythin/homebrew-tap &>/dev/null; then
+            gh release upload "$TAP_TAG" --repo kythin/homebrew-tap --clobber \
+              artifacts/stackydo-*.tar.xz
+          else
+            gh release create "$TAP_TAG" \
+              --repo kythin/homebrew-tap \
+              --title "stackydo ${VERSION}" \
+              --notes "stackydo ${VERSION} binaries" \
+              artifacts/stackydo-*.tar.xz
+          fi
 
-          # Get release asset IDs from the GitHub API
-          ASSETS=$(gh api repos/kythin/stackydo-cli/releases/tags/${VERSION} --jq '.assets[] | "\(.name) \(.id)"')
+          # Get asset IDs from public tap release
+          ASSETS=$(gh api repos/kythin/homebrew-tap/releases/tags/${TAP_TAG} --jq '.assets[] | "\(.name) \(.id)"')
           ARM_MAC_ID=$(echo "$ASSETS" | grep "aarch64-apple-darwin.tar.xz " | awk '{print $2}')
           INTEL_MAC_ID=$(echo "$ASSETS" | grep "x86_64-apple-darwin.tar.xz " | awk '{print $2}')
           ARM_LINUX_ID=$(echo "$ASSETS" | grep "aarch64-unknown-linux-gnu.tar.xz " | awk '{print $2}')
           INTEL_LINUX_ID=$(echo "$ASSETS" | grep "x86_64-unknown-linux-gnu.tar.xz " | awk '{print $2}')
 
-          API_BASE="https://api.github.com/repos/kythin/stackydo-cli/releases/assets"
+          API_BASE="https://api.github.com/repos/kythin/homebrew-tap/releases/assets"
 
           # Generate the formula
           cat > stackydo.rb << FORMULA
@@ -106,7 +114,7 @@ jobs:
           # Fix indentation from heredoc
           sed -i 's/^          //' stackydo.rb
 
-          # Push to public tap repo via GitHub API
+          # Push formula to public tap repo via GitHub API
           EXISTING_SHA=$(gh api repos/kythin/homebrew-tap/contents/Formula/stackydo.rb --jq '.sha' 2>/dev/null || echo "")
 
           CONTENT=$(base64 -w 0 stackydo.rb)
@@ -126,5 +134,5 @@ jobs:
               --silent
           fi
 
-          echo "Formula promoted to public tap successfully"
+          echo "Binaries and formula promoted to public tap successfully"
           echo "### Promoted stackydo ${VERSION} to public tap" >> "$GITHUB_STEP_SUMMARY"

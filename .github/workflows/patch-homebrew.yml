@@ -6,9 +6,9 @@ jobs:
   update-tap:
     runs-on: ubuntu-latest
     steps:
-      - name: Download release archives
+      - name: Download release archives from source repo
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_BETA_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ github.event.release.tag_name }}"
           gh release download "$VERSION" \
@@ -16,12 +16,13 @@ jobs:
             --pattern "*.tar.xz" \
             --dir artifacts
 
-      - name: Generate and push formula to beta tap
+      - name: Upload binaries to beta tap release and update formula
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_BETA_TOKEN }}
         run: |
           VERSION="${{ github.event.release.tag_name }}"
           CLEAN_VERSION="${VERSION#v}"
+          TAP_TAG="stackydo-${VERSION}"
 
           # Compute SHAs from the build artifacts
           SHA_ARM_MAC=$(sha256sum artifacts/stackydo-aarch64-apple-darwin.tar.xz | cut -d ' ' -f 1)
@@ -29,14 +30,31 @@ jobs:
           SHA_ARM_LINUX=$(sha256sum artifacts/stackydo-aarch64-unknown-linux-gnu.tar.xz | cut -d ' ' -f 1)
           SHA_INTEL_LINUX=$(sha256sum artifacts/stackydo-x86_64-unknown-linux-gnu.tar.xz | cut -d ' ' -f 1)
 
-          # Get release asset IDs from the GitHub API
-          ASSETS=$(gh api repos/kythin/stackydo-cli/releases/tags/${VERSION} --jq '.assets[] | "\(.name) \(.id)"')
+          echo "aarch64-apple-darwin: ${SHA_ARM_MAC}"
+          echo "x86_64-apple-darwin: ${SHA_INTEL_MAC}"
+          echo "aarch64-unknown-linux-gnu: ${SHA_ARM_LINUX}"
+          echo "x86_64-unknown-linux-gnu: ${SHA_INTEL_LINUX}"
+
+          # Create release in tap repo (or upload to existing)
+          if gh release view "$TAP_TAG" --repo kythin/homebrew-tap-beta &>/dev/null; then
+            gh release upload "$TAP_TAG" --repo kythin/homebrew-tap-beta --clobber \
+              artifacts/stackydo-*.tar.xz
+          else
+            gh release create "$TAP_TAG" \
+              --repo kythin/homebrew-tap-beta \
+              --title "stackydo ${VERSION}" \
+              --notes "stackydo ${VERSION} binaries" \
+              artifacts/stackydo-*.tar.xz
+          fi
+
+          # Get asset IDs from tap repo release
+          ASSETS=$(gh api repos/kythin/homebrew-tap-beta/releases/tags/${TAP_TAG} --jq '.assets[] | "\(.name) \(.id)"')
           ARM_MAC_ID=$(echo "$ASSETS" | grep "aarch64-apple-darwin.tar.xz " | awk '{print $2}')
           INTEL_MAC_ID=$(echo "$ASSETS" | grep "x86_64-apple-darwin.tar.xz " | awk '{print $2}')
           ARM_LINUX_ID=$(echo "$ASSETS" | grep "aarch64-unknown-linux-gnu.tar.xz " | awk '{print $2}')
           INTEL_LINUX_ID=$(echo "$ASSETS" | grep "x86_64-unknown-linux-gnu.tar.xz " | awk '{print $2}')
 
-          API_BASE="https://api.github.com/repos/kythin/stackydo-cli/releases/assets"
+          API_BASE="https://api.github.com/repos/kythin/homebrew-tap-beta/releases/assets"
 
           # Generate the formula
           cat > stackydo.rb << FORMULA
@@ -84,7 +102,7 @@ jobs:
           # Fix indentation from heredoc
           sed -i 's/^          //' stackydo.rb
 
-          # Push to beta tap repo via GitHub API
+          # Push formula to beta tap repo via GitHub API
           EXISTING_SHA=$(gh api repos/kythin/homebrew-tap-beta/contents/Formula/stackydo.rb --jq '.sha' 2>/dev/null || echo "")
 
           CONTENT=$(base64 -w 0 stackydo.rb)
@@ -104,4 +122,4 @@ jobs:
               --silent
           fi
 
-          echo "Formula updated in beta tap successfully"
+          echo "Binaries and formula updated in beta tap successfully"
