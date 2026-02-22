@@ -1,79 +1,107 @@
-name: Patch Homebrew Formula
+name: Update Homebrew Tap
 on:
   release:
     types: [published]
 jobs:
-  patch-formula:
+  update-tap:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
-      - name: Download formula from release
+      - name: Download release archives
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          gh release download "${{ github.event.release.tag_name }}" \
+          VERSION="${{ github.event.release.tag_name }}"
+          gh release download "$VERSION" \
             --repo kythin/stackydo-cli \
-            --pattern "stackydo.rb" \
-            --dir formula
-      - name: Get asset IDs and patch formula
+            --pattern "*.tar.xz" \
+            --dir artifacts
+
+      - name: Generate and push formula
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          FORMULA="formula/stackydo.rb"
+          VERSION="${{ github.event.release.tag_name }}"
+          CLEAN_VERSION="${VERSION#v}"
 
-          # Get asset IDs for each platform archive
-          ASSETS=$(gh api "repos/kythin/stackydo-cli/releases/tags/$TAG" \
-            --jq '.assets[] | select(.name | test("tar\\.xz$")) | "\(.name) \(.id)"')
+          # Compute SHAs from the build artifacts
+          SHA_ARM_MAC=$(sha256sum artifacts/stackydo-aarch64-apple-darwin.tar.xz | cut -d ' ' -f 1)
+          SHA_INTEL_MAC=$(sha256sum artifacts/stackydo-x86_64-apple-darwin.tar.xz | cut -d ' ' -f 1)
+          SHA_ARM_LINUX=$(sha256sum artifacts/stackydo-aarch64-unknown-linux-gnu.tar.xz | cut -d ' ' -f 1)
+          SHA_INTEL_LINUX=$(sha256sum artifacts/stackydo-x86_64-unknown-linux-gnu.tar.xz | cut -d ' ' -f 1)
 
-          # For each url line pointing to a release download, replace with
-          # GitHub API asset URL + auth headers for private repo access
-          python3 << PYEOF
-          import re
+          # Get release asset IDs from the GitHub API
+          ASSETS=$(gh api repos/kythin/stackydo-cli/releases/tags/${VERSION} --jq '.assets[] | "\(.name) \(.id)"')
+          ARM_MAC_ID=$(echo "$ASSETS" | grep "aarch64-apple-darwin.tar.xz " | awk '{print $2}')
+          INTEL_MAC_ID=$(echo "$ASSETS" | grep "x86_64-apple-darwin.tar.xz " | awk '{print $2}')
+          ARM_LINUX_ID=$(echo "$ASSETS" | grep "aarch64-unknown-linux-gnu.tar.xz " | awk '{print $2}')
+          INTEL_LINUX_ID=$(echo "$ASSETS" | grep "x86_64-unknown-linux-gnu.tar.xz " | awk '{print $2}')
 
-          with open("$FORMULA") as f:
-              content = f.read()
+          API_BASE="https://api.github.com/repos/kythin/stackydo-cli/releases/assets"
 
-          assets = {}
-          for line in """$ASSETS""".strip().split("\n"):
-              name, asset_id = line.rsplit(" ", 1)
-              assets[name] = asset_id
+          # Generate the formula
+          cat > stackydo.rb << FORMULA
+          class Stackydo < Formula
+            desc "Context-aware CLI task manager with TUI"
+            homepage "https://github.com/kythin/stackydo-cli"
+            version "${CLEAN_VERSION}"
+            license "MIT"
 
-          def replace_url(match):
-              indent = match.group(1)
-              filename = match.group(2)
-              asset_id = assets.get(filename)
-              if not asset_id:
-                  return match.group(0)  # no replacement
-              api_url = f"https://api.github.com/repos/kythin/stackydo-cli/releases/assets/{asset_id}"
-              return (
-                  f'{indent}url "{api_url}",\n'
-                  f'{indent}    headers: ["Accept: application/octet-stream",'
-                  f' "Authorization: token #{{ENV.fetch(\\"HOMEBREW_GITHUB_API_TOKEN\\", \\"\\")}}"]'
-              )
+            on_macos do
+              if Hardware::CPU.arm?
+                url "${API_BASE}/${ARM_MAC_ID}",
+                    headers: ["Authorization: token #{ENV["HOMEBREW_GITHUB_API_TOKEN"]}", "Accept: application/octet-stream"]
+                sha256 "${SHA_ARM_MAC}"
+              else
+                url "${API_BASE}/${INTEL_MAC_ID}",
+                    headers: ["Authorization: token #{ENV["HOMEBREW_GITHUB_API_TOKEN"]}", "Accept: application/octet-stream"]
+                sha256 "${SHA_INTEL_MAC}"
+              end
+            end
 
-          pattern = r'(\s+)url "https://github\.com/kythin/stackydo-cli/releases/download/[^/]+/([^"]+)"'
-          new_content = re.sub(pattern, replace_url, content)
+            on_linux do
+              if Hardware::CPU.arm?
+                url "${API_BASE}/${ARM_LINUX_ID}",
+                    headers: ["Authorization: token #{ENV["HOMEBREW_GITHUB_API_TOKEN"]}", "Accept: application/octet-stream"]
+                sha256 "${SHA_ARM_LINUX}"
+              else
+                url "${API_BASE}/${INTEL_LINUX_ID}",
+                    headers: ["Authorization: token #{ENV["HOMEBREW_GITHUB_API_TOKEN"]}", "Accept: application/octet-stream"]
+                sha256 "${SHA_INTEL_LINUX}"
+              end
+            end
 
-          with open("$FORMULA", "w") as f:
-              f.write(new_content)
+            def install
+              bin.install "stackydo"
+              bin.install "stackydo-mcp"
+            end
 
-          print("Patched formula with asset URLs")
-          PYEOF
-      - name: Checkout tap
-        uses: actions/checkout@v4
-        with:
-          repository: kythin/homebrew-stackydo
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: tap
-      - name: Update formula in tap
-        run: |
-          mkdir -p tap/Formula
-          cp formula/stackydo.rb tap/Formula/stackydo.rb
-          cd tap
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
+            test do
+              assert_match version.to_s, shell_output("#{bin}/stackydo --version")
+            end
+          end
+          FORMULA
+
+          # Fix indentation from heredoc
+          sed -i 's/^          //' stackydo.rb
+
+          # Push to tap repo via GitHub API
+          EXISTING_SHA=$(gh api repos/kythin/homebrew-stackydo/contents/Formula/stackydo.rb --jq '.sha' 2>/dev/null || echo "")
+
+          CONTENT=$(base64 -w 0 stackydo.rb)
+
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api repos/kythin/homebrew-stackydo/contents/Formula/stackydo.rb \
+              --method PUT \
+              -f message="Update stackydo to ${VERSION}" \
+              -f content="${CONTENT}" \
+              -f sha="${EXISTING_SHA}" \
+              --silent
           else
-            git commit -m "Update stackydo to ${{ github.event.release.tag_name }}"
-            git push
+            gh api repos/kythin/homebrew-stackydo/contents/Formula/stackydo.rb \
+              --method PUT \
+              -f message="Update stackydo to ${VERSION}" \
+              -f content="${CONTENT}" \
+              --silent
           fi
+
+          echo "Formula updated successfully"
