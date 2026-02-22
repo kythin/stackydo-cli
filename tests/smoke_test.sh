@@ -21,14 +21,14 @@ TESTS_RUN=0
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 pass() {
-    ((PASS++))
-    ((TESTS_RUN++))
+    (( ++PASS ))
+    (( ++TESTS_RUN ))
     echo "  ✓ $1"
 }
 
 fail() {
-    ((FAIL++))
-    ((TESTS_RUN++))
+    (( ++FAIL ))
+    (( ++TESTS_RUN ))
     echo "  ✗ $1"
     if [[ -n "${2:-}" ]]; then
         echo "    → $2"
