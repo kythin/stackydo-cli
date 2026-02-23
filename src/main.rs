@@ -4,6 +4,9 @@ use stackydo::commands;
 use stackydo::storage::paths::TodoPaths;
 
 fn main() {
+    // Resolve task store root from env / .stackydo-context / default
+    TodoPaths::init();
+
     // Ensure storage directory exists
     if let Err(e) = TodoPaths::ensure_root() {
         eprintln!("Error: cannot create {}: {e}", TodoPaths::root().display());
@@ -37,8 +40,8 @@ fn main() {
         Some(Commands::Search(ref args)) => {
             commands::search::execute(args)
         }
-        Some(Commands::Context) => {
-            commands::context::execute()
+        Some(Commands::Context(ref args)) => {
+            commands::context::execute(args)
         }
         Some(Commands::Stats(ref args)) => {
             commands::stats::execute(args)

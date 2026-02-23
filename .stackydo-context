@@ -1,3 +1,4 @@
+dir: .stackydo-workspace
 project: stackydo
 repo: kythin-todo-cli
 stack: dev

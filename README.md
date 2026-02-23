@@ -10,7 +10,9 @@ The core idea: your work doesn't live in one project. You might be debugging a p
 
 Most task managers are built for teams or for single projects. Stackydo is built for **you** — the individual who needs to:
 
-- Track work across 3-5 projects, team duties, and personal goals simultaneously
+- Track work across multiple projects, random ideas, ad-hoc tasks and "oh i should do X" things that pop up constantly, team duties, and personal goals simultaneously
+- The ultimate goal is to be so quick and easy to use that it becomes virtually muscle memory to offload all the little todo's that constantly barage you while working on something else
+- the added benefit of the Stackydo approach is that it also becomes incredibly quick, easy, and clear for AI agents to use as well - either in their own workspace for their own todo stacks, or on the user's behalf/collaboration to help the user offload and then later come back and triage/action the important stuff
 - Create tasks from wherever you are (terminal, editor, scripts, AI agents)
 - Search across everything at once ("what was that security thing last week?")
 - Let AI tools triage, summarize, and report on your workload
@@ -28,29 +30,35 @@ The storage format is intentionally simple: one markdown file per task, human-re
 - **AI-friendly storage** — plain markdown+YAML files that any LLM or script can read and write
 - **`.stackydo-context` files** — define project-level context that gets attached to new tasks automatically
 - **Session chaining** — tracks the last task ID created per shell session via `$STACKYDO_LAST_ID`
-- **Configurable storage** — set `$STACKYDO_DIR` to relocate the task store (defaults to `~/.stackydo/`)
+- **Configurable storage** — set `dir` in `.stackydo-context` for per-project workspaces, or `$STACKYDO_DIR` for per-session overrides (defaults to `~/.stackydo/`)
 
 ## Install
 
 ### Homebrew (macOS/Linux)
 
+Public release channel
 ```bash
-brew tap kythin/stackydo && brew install stackydo
+brew tap kythin/homebrew-tap && brew install stackydo
 ```
 
-### Shell (curl one-liner)
+Beta release channel (requires authentication)
+```bash
+brew tap kythin/homebrew-tap-beta && brew install stackydo
+```
+
+### Shell (curl one-liner) (requires authentication)
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kythin/stackydo-cli/releases/latest/download/stackydo-installer.sh | sh
 ```
 
-### PowerShell (Windows)
+### PowerShell (Windows) (requires authentication)
 
 ```powershell
 powershell -c "irm https://github.com/kythin/stackydo-cli/releases/latest/download/stackydo-installer.ps1 | iex"
 ```
 
-### From source
+### From source (requires authentication)
 
 ```bash
 cargo install --git https://github.com/kythin/stackydo-cli
@@ -244,7 +252,7 @@ The server also exposes a `stackydo://guide` resource with a full agent guide, a
 
 | Variable             | Description                                                              |
 |----------------------|--------------------------------------------------------------------------|
-| `STACKYDO_DIR`     | Override the task storage directory (default: `~/.stackydo/`)          |
+| `STACKYDO_DIR`     | Override the task storage directory (highest priority, overrides `.stackydo-context`; default: `~/.stackydo/`) |
 | `STACKYDO_LAST_ID` | Set automatically by `stackydo create`; chains tasks in a shell session |
 
 ## Task Storage
@@ -283,25 +291,53 @@ On task creation, `stackydo` automatically captures:
 
 Use `stackydo context` to preview what would be captured without creating a task.
 
+### Workspace Resolution
+
+The `.stackydo-context` file can also set the task store location via a `dir` field. This lets a project root define a shared workspace (e.g. as a git submodule) without requiring every user to set an environment variable.
+
+Resolution priority:
+1. `$STACKYDO_DIR` env var (highest — per-session override)
+2. `dir` field in the nearest `.stackydo-context` (per-project)
+3. `~/.stackydo/` (default)
+
+Example `.stackydo-context`:
+
+```yaml
+dir: .stackydo-workspace
+project: my-app
+stack: dev
+description: Project-level context captured on new tasks
+```
+
+The `dir` path is resolved relative to the config file's location. Use `stackydo context` to see which source resolved the task store.
+
+To set up a project workspace:
+
+```bash
+# Initialize workspace + write .stackydo-context in CWD
+stackydo init --here --dir .stackydo-workspace
+```
+
 ## Testing
 
 ```bash
 cargo test                                     # unit tests
-cargo build && bash tests/smoke_test.sh        # CLI smoke tests (76 assertions)
+cargo build && bash tests/smoke_test.sh        # CLI smoke tests (106 assertions)
 ```
 
 The smoke test uses `$STACKYDO_DIR` to write to a local `tests/.test-data/` directory — it never touches `~/.stackydo/`.
 
 ## Development Workspace
 
-This repo includes a workspace-local task store at `.stackydo-workspace/` (gitignored) so that AI agents and contributors can use stackydo itself to track development work. A `.stackydo-context` file at the repo root provides project context for new tasks.
+This repo includes a workspace-local task store at `.stackydo-workspace/` (gitignored). The `.stackydo-context` at the repo root has `dir: .stackydo-workspace`, so running stackydo from anywhere inside this repo automatically uses the local workspace — no env var needed.
 
 ```bash
-# Use the local workspace instead of ~/.stackydo/
-export STACKYDO_DIR=.stackydo-workspace
-
+# Just works — .stackydo-context points to the local workspace
 stackydo create --title "Fix parser edge case" --stack dev -- Details here
 stackydo list --stack dev
+
+# Override with env var if needed (e.g. to use your personal store)
+STACKYDO_DIR=~/.stackydo stackydo list
 ```
 
 See `CLAUDE.md` for full agent dogfooding instructions.

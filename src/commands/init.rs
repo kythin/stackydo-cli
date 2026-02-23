@@ -1,5 +1,6 @@
 use crate::cli::args::InitArgs;
 use crate::error::Result;
+use crate::model::config::StackydoConfig;
 use crate::model::manifest::Manifest;
 use crate::storage::manifest_store::ManifestStore;
 use std::fs;
@@ -32,7 +33,7 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         created.push(format!("Manifest exists: {}", manifest_path.display()));
     }
 
-    // 3. Create .stackydo-context template
+    // 3. Create .stackydo-context template inside the workspace
     let context_path = root.join(".stackydo-context");
     if !context_path.exists() {
         let should_create = if args.yes {
@@ -70,16 +71,45 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         }
     }
 
-    // 5. Print summary
+    // 5. Write .stackydo-context in CWD when --here is passed
+    if args.here {
+        let dir_value = args.dir.as_deref().unwrap_or(".stackydo");
+        let cwd_context_path = std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(".stackydo-context");
+
+        if cwd_context_path.exists() {
+            // Parse existing file, update/add the dir field, and re-write
+            let existing = fs::read_to_string(&cwd_context_path)?;
+            let mut config: StackydoConfig =
+                serde_yaml::from_str(&existing).unwrap_or_default();
+            config.dir = Some(dir_value.to_string());
+            let new_content = serde_yaml::to_string(&config)
+                .unwrap_or_else(|_| format!("dir: {dir_value}\n"));
+            fs::write(&cwd_context_path, new_content)?;
+            created.push(format!(
+                "Updated .stackydo-context: dir = {dir_value}"
+            ));
+        } else {
+            let content = format!("dir: {dir_value}\n");
+            fs::write(&cwd_context_path, content)?;
+            created.push(format!(
+                "Created .stackydo-context: dir = {dir_value}"
+            ));
+        }
+    }
+
+    // 6. Print summary
     println!("Stackydo workspace initialized:");
     for line in &created {
         println!("  {line}");
     }
 
-    // 6. Hint about STACKYDO_DIR if custom dir
-    if args.dir.is_some() {
-        println!("\nTo use this workspace, set:");
-        println!("  export STACKYDO_DIR=\"{}\"", root.display());
+    // 7. Hint about how to use the workspace
+    if args.dir.is_some() && !args.here {
+        println!("\nTo use this workspace, either:");
+        println!("  1. Run `stackydo init --here --dir {}` to write a .stackydo-context", root.display());
+        println!("  2. export STACKYDO_DIR=\"{}\"  (per-session override)", root.display());
     }
 
     // Check if we're in a git repo and suggest submodule approach

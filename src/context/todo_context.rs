@@ -1,3 +1,4 @@
+use crate::model::config::{ResolvedConfig, StackydoConfig};
 use crate::model::context::TodoContextFile;
 use crate::storage::paths::TodoPaths;
 use std::fs;
@@ -32,4 +33,24 @@ pub fn discover(start_dir: &Path) -> Option<TodoContextFile> {
     }
 
     None
+}
+
+/// Discover the nearest `.stackydo-context` file and parse it as YAML config.
+///
+/// Uses the same search order as `discover()`. If the file exists but isn't valid
+/// YAML (e.g. freeform text), returns a `ResolvedConfig` with all fields `None`
+/// but the raw content preserved.
+pub fn discover_config(start_dir: &Path) -> Option<ResolvedConfig> {
+    let ctx_file = discover(start_dir)?;
+    let file_path = Path::new(&ctx_file.path).to_path_buf();
+
+    // Try to parse as YAML; if it fails, return default config with raw content
+    let config = serde_yaml::from_str::<StackydoConfig>(&ctx_file.content)
+        .unwrap_or_default();
+
+    Some(ResolvedConfig {
+        config,
+        file_path,
+        raw_content: ctx_file.content,
+    })
 }

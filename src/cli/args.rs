@@ -33,7 +33,7 @@ pub enum Commands {
     Search(SearchArgs),
 
     /// Show the context that would be captured for a new task (debugging)
-    Context,
+    Context(ContextArgs),
 
     /// Show aggregate statistics across all tasks
     Stats(StatsArgs),
@@ -285,6 +285,13 @@ pub struct SearchArgs {
 }
 
 #[derive(Parser)]
+pub struct ContextArgs {
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Parser)]
 pub struct StatsArgs {
     /// Output as JSON
     #[arg(long)]
@@ -303,6 +310,10 @@ pub struct InitArgs {
     /// Override storage directory path
     #[arg(long)]
     pub dir: Option<String>,
+
+    /// Write a .stackydo-context in CWD pointing to --dir (implies --dir)
+    #[arg(long)]
+    pub here: bool,
 
     /// Non-interactive mode, accept defaults
     #[arg(long, short)]
