@@ -39,7 +39,7 @@ fn glob_match_impl(p: &str, t: &str) -> bool {
 /// Returns true if `task_stack` matches the glob `pattern`.
 /// A task with no stack never matches any pattern.
 pub fn stack_filter_matches(pattern: &str, task_stack: Option<&str>) -> bool {
-    task_stack.map_or(false, |s| glob_matches(pattern, s))
+    task_stack.is_some_and(|s| glob_matches(pattern, s))
 }
 
 /// Return the `stack_filter` from the active `stackydo.json`, if any.
@@ -148,6 +148,20 @@ pub fn matches_filters(
     true
 }
 
+/// Print a single value as JSON to stdout.
+pub fn print_json<T: Serialize>(value: &T) -> Result<()> {
+    let json = serde_json::to_string_pretty(value)?;
+    println!("{json}");
+    Ok(())
+}
+
+/// Print a slice of values as a JSON array to stdout.
+pub fn print_json_array<T: Serialize>(values: &[T]) -> Result<()> {
+    let json = serde_json::to_string_pretty(values)?;
+    println!("{json}");
+    Ok(())
+}
+
 #[cfg(test)]
 mod glob_tests {
     use super::glob_matches;
@@ -196,18 +210,4 @@ mod glob_tests {
         assert!(!super::stack_filter_matches("work", None));
         assert!(!super::stack_filter_matches("*", None));
     }
-}
-
-/// Print a single value as JSON to stdout.
-pub fn print_json<T: Serialize>(value: &T) -> Result<()> {
-    let json = serde_json::to_string_pretty(value)?;
-    println!("{json}");
-    Ok(())
-}
-
-/// Print a slice of values as a JSON array to stdout.
-pub fn print_json_array<T: Serialize>(values: &[T]) -> Result<()> {
-    let json = serde_json::to_string_pretty(values)?;
-    println!("{json}");
-    Ok(())
 }
