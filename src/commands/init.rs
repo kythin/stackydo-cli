@@ -56,6 +56,7 @@ pub fn execute(args: &InitArgs) -> Result<()> {
             true
         } else {
             print!("Create stackydo.json config template? [Y/n] ");
+            std::io::stdout().flush()?;
             let mut input = String::new();
             std::io::stdin().read_line(&mut input)?;
             let input = input.trim().to_lowercase();
