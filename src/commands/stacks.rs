@@ -1,5 +1,5 @@
 use crate::cli::args::StacksArgs;
-use crate::commands::util::print_json;
+use crate::commands::util::{active_stack_filter, glob_matches, print_json};
 use crate::error::Result;
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
@@ -18,12 +18,19 @@ pub fn execute(args: &StacksArgs) -> Result<()> {
     let tasks = store.load_all()?;
     let manifest = manifest_store.load()?;
 
+    let stack_filter = active_stack_filter();
+
     // Collect all known stacks from tasks + manifest
     let mut all_stacks: BTreeSet<String> = manifest.stacks.iter().cloned().collect();
     for task in &tasks {
         if let Some(ref stack) = task.frontmatter.stack {
             all_stacks.insert(stack.clone());
         }
+    }
+
+    // Apply stack_filter from stackydo.json
+    if let Some(ref pattern) = stack_filter {
+        all_stacks.retain(|s| glob_matches(pattern, s));
     }
 
     // Build per-stack stats

@@ -20,6 +20,7 @@ struct ContextOutput {
     manifest: String,
     resolution_source: String,
     config_dir_field: Option<String>,
+    config_stack_filter: Option<String>,
     env: BTreeMap<String, Option<String>>,
 }
 
@@ -57,6 +58,8 @@ pub fn execute(args: &ContextArgs) -> Result<()> {
     let source = TodoPaths::resolution_source();
     let config_dir_field = TodoPaths::resolved_config()
         .and_then(|c| c.config.dir.clone());
+    let config_stack_filter = TodoPaths::resolved_config()
+        .and_then(|c| c.config.stack_filter.clone());
 
     if args.json {
         let output = ContextOutput {
@@ -71,6 +74,7 @@ pub fn execute(args: &ContextArgs) -> Result<()> {
             manifest: TodoPaths::manifest().display().to_string(),
             resolution_source: source.as_str().to_string(),
             config_dir_field,
+            config_stack_filter,
             env,
         };
         return print_json(&output);
@@ -99,7 +103,7 @@ pub fn execute(args: &ContextArgs) -> Result<()> {
     println!();
     println!("  Config file:     {}", result.config_file_path
         .as_deref()
-        .unwrap_or("(none found)"));
+        .unwrap_or("(no stackydo.json found)"));
 
     if let Some(ref content) = ctx.todo_context_content {
         println!("  Config content:");
@@ -117,6 +121,9 @@ pub fn execute(args: &ContextArgs) -> Result<()> {
     println!("    Source:         {}", source.as_str());
     if let Some(ref dir_field) = config_dir_field {
         println!("    Config dir:     {dir_field}");
+    }
+    if let Some(ref filter) = config_stack_filter {
+        println!("    Stack filter:   {filter}");
     }
     match source {
         crate::storage::paths::ResolutionSource::Env => {

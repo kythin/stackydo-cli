@@ -4,15 +4,15 @@ use crate::storage::paths::TodoPaths;
 use std::fs;
 use std::path::Path;
 
-/// Discover and read the nearest `.stackydo-context` file.
+/// Discover and read the nearest `stackydo.json` file.
 ///
 /// Search order:
-/// 1. Walk up from `start_dir` looking for `.stackydo-context`
-/// 2. Fall back to `~/.stackydo-context`
+/// 1. Walk up from `start_dir` looking for `stackydo.json`
+/// 2. Fall back to `~/.stackydo.json`
 /// 3. Return None if neither exists
 pub fn discover(start_dir: &Path) -> Option<TodoContextFile> {
     // Try ancestry walk first
-    if let Some(path) = TodoPaths::find_todo_context(start_dir) {
+    if let Some(path) = TodoPaths::find_config(start_dir) {
         if let Ok(content) = fs::read_to_string(&path) {
             return Some(TodoContextFile {
                 path: path.to_string_lossy().into(),
@@ -22,11 +22,11 @@ pub fn discover(start_dir: &Path) -> Option<TodoContextFile> {
     }
 
     // Fallback to home directory
-    let home_ctx = TodoPaths::home_todo_context();
-    if home_ctx.is_file() {
-        if let Ok(content) = fs::read_to_string(&home_ctx) {
+    let home_cfg = TodoPaths::home_config();
+    if home_cfg.is_file() {
+        if let Ok(content) = fs::read_to_string(&home_cfg) {
             return Some(TodoContextFile {
-                path: home_ctx.to_string_lossy().into(),
+                path: home_cfg.to_string_lossy().into(),
                 content,
             });
         }
@@ -35,17 +35,16 @@ pub fn discover(start_dir: &Path) -> Option<TodoContextFile> {
     None
 }
 
-/// Discover the nearest `.stackydo-context` file and parse it as YAML config.
+/// Discover the nearest `stackydo.json` file and parse it.
 ///
-/// Uses the same search order as `discover()`. If the file exists but isn't valid
-/// YAML (e.g. freeform text), returns a `ResolvedConfig` with all fields `None`
-/// but the raw content preserved.
+/// Uses the same search order as `discover()`. If the file exists but isn't
+/// valid JSON, returns a `ResolvedConfig` with all fields `None` but the raw
+/// content preserved.
 pub fn discover_config(start_dir: &Path) -> Option<ResolvedConfig> {
     let ctx_file = discover(start_dir)?;
     let file_path = Path::new(&ctx_file.path).to_path_buf();
 
-    // Try to parse as YAML; if it fails, return default config with raw content
-    let config = serde_yaml::from_str::<StackydoConfig>(&ctx_file.content)
+    let config = serde_json::from_str::<StackydoConfig>(&ctx_file.content)
         .unwrap_or_default();
 
     Some(ResolvedConfig {

@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/kythin/stackydo-cli/main/schemas/stackydo.schema.json",
+  "title": "Stackydo Config",
+  "description": "Configuration for a stackydo project or workspace. Place as `stackydo.json` in your project root or workspace directory. stackydo walks up from CWD to find this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema URI (for editor autocompletion and validation)."
+    },
+    "dir": {
+      "type": "string",
+      "description": "Path to the task store directory, relative to this file. Overrides the STACKYDO_DIR environment variable.",
+      "examples": [".stackydo", "../shared-tasks"]
+    },
+    "stack_filter": {
+      "type": "string",
+      "description": "Glob pattern (supports * wildcards) limiting which stacks appear in list, stats, stacks, search output, and the TUI. When absent, all stacks are shown. Does not restrict write access — use separate workspaces for isolation.",
+      "examples": ["work", "project-myapp_*", "*-dev", "sprint-*"]
+    },
+    "context": {
+      "type": "object",
+      "description": "Project context metadata attached to tasks created from this directory.",
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "type": "string",
+          "description": "Human-readable project name.",
+          "examples": ["My App", "stackydo-cli"]
+        },
+        "repo": {
+          "type": "string",
+          "description": "Repository URL or identifier.",
+          "examples": ["https://github.com/org/repo", "github:org/repo"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Free-text notes captured as context when creating tasks. Useful for giving AI agents background about this project."
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 pub mod complete;
+pub mod mcp_setup;
 pub mod context;
 pub mod create;
 pub mod delete;

@@ -1,12 +1,19 @@
 use crate::cli::args::SearchArgs;
-use crate::commands::util::{format_task_row, print_json_array};
+use crate::commands::util::{
+    active_stack_filter, format_task_row, print_json_array, stack_filter_matches,
+};
 use crate::error::Result;
 use crate::model::task::TaskJson;
 use crate::storage::task_store::TaskStore;
 
 pub fn execute(args: &SearchArgs) -> Result<()> {
     let store = TaskStore::new();
-    let results = store.search(&args.query)?;
+    let mut results = store.search(&args.query)?;
+
+    // Apply stack_filter from stackydo.json
+    if let Some(ref pattern) = active_stack_filter() {
+        results.retain(|t| stack_filter_matches(pattern, t.frontmatter.stack.as_deref()));
+    }
 
     if args.json {
         let json_results: Vec<TaskJson> = results.iter().map(TaskJson::from).collect();

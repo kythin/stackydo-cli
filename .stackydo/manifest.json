@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "tags": [],
+  "stacks": [],
+  "features": {},
+  "settings": {
+    "default_sort": "created",
+    "auto_capture_git": true,
+    "quick_list_limit": 50
+  }
+}

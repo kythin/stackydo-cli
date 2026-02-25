@@ -1,0 +1,4 @@
+{
+  "$schema": "https://raw.githubusercontent.com/kythin/stackydo-cli/main/schemas/stackydo.schema.json",
+  "dir": ".stackydo"
+}

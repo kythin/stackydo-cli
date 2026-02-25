@@ -5,7 +5,7 @@ use std::path::Path;
 /// Full capture result including metadata not stored on tasks (e.g. config file path).
 pub struct CaptureResult {
     pub context: ContextInfo,
-    /// Path to the `.stackydo-context` config file that was loaded, if any.
+    /// Path to the `stackydo.json` config file that was loaded, if any.
     pub config_file_path: Option<String>,
 }
 
@@ -23,10 +23,18 @@ pub fn capture_full(context_path: &Path) -> CaptureResult {
         .unwrap_or_else(|_| ".".into());
 
     let git = git_context::capture(context_path);
-    let todo_ctx = todo_context::discover(context_path);
+    let todo_cfg = todo_context::discover_config(context_path);
     let session_prev = std::env::var("STACKYDO_LAST_ID").ok();
 
-    let config_file_path = todo_ctx.as_ref().map(|c| c.path.clone());
+    let config_file_path = todo_cfg
+        .as_ref()
+        .map(|c| c.file_path.to_string_lossy().into_owned());
+
+    // Use context.description as the task context content, if provided.
+    let todo_context_content = todo_cfg
+        .as_ref()
+        .and_then(|c| c.config.context.as_ref())
+        .and_then(|ctx| ctx.description.clone());
 
     let context = ContextInfo {
         path: None,
@@ -37,7 +45,7 @@ pub fn capture_full(context_path: &Path) -> CaptureResult {
         git_remote: git.as_ref().and_then(|g| g.remote.clone()),
         git_commit: git.as_ref().and_then(|g| g.commit.clone()),
         working_dir: cwd,
-        todo_context_content: todo_ctx.map(|c| c.content),
+        todo_context_content,
         session_prev_task_id: session_prev,
     };
 

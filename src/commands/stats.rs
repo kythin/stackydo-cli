@@ -1,5 +1,5 @@
 use crate::cli::args::StatsArgs;
-use crate::commands::util::print_json;
+use crate::commands::util::{active_stack_filter, print_json, stack_filter_matches};
 use crate::error::Result;
 use crate::model::task::TaskStatus;
 use crate::storage::task_store::TaskStore;
@@ -24,7 +24,13 @@ struct StatsOutput {
 
 pub fn execute(args: &StatsArgs) -> Result<()> {
     let store = TaskStore::new();
-    let tasks = store.load_all()?;
+    let mut tasks = store.load_all()?;
+
+    // Apply stack_filter from stackydo.json
+    if let Some(ref pattern) = active_stack_filter() {
+        tasks.retain(|t| stack_filter_matches(pattern, t.frontmatter.stack.as_deref()));
+    }
+
     let now = Utc::now();
 
     let total = tasks.len();

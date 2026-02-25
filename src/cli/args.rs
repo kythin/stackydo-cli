@@ -46,6 +46,10 @@ pub enum Commands {
 
     /// Import tasks from stdin (JSON or YAML)
     Import(ImportArgs),
+
+    /// Register stackydo-mcp with Claude Code via `claude mcp add`
+    #[command(name = "mcp-setup")]
+    McpSetup(McpSetupArgs),
 }
 
 #[derive(Parser)]
@@ -311,7 +315,7 @@ pub struct InitArgs {
     #[arg(long)]
     pub dir: Option<String>,
 
-    /// Write a .stackydo-context in CWD pointing to --dir (implies --dir)
+    /// Write a stackydo.json in CWD pointing to --dir (implies --dir)
     #[arg(long)]
     pub here: bool,
 
@@ -329,4 +333,15 @@ pub struct ImportArgs {
     /// Input format: json or yaml (default: json)
     #[arg(long, default_value = "json")]
     pub format: String,
+}
+
+#[derive(Parser)]
+pub struct McpSetupArgs {
+    /// MCP scope: project, user, or local (default: project)
+    #[arg(long, default_value = "project")]
+    pub scope: Option<String>,
+
+    /// Name to register the server under (default: stackydo)
+    #[arg(long, default_value = "stackydo")]
+    pub name: Option<String>,
 }

@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 pub enum ResolutionSource {
     /// `STACKYDO_DIR` environment variable
     Env,
-    /// `dir` field in `.stackydo-context`
+    /// `dir` field in `stackydo.json`
     Config,
     /// Default `~/.stackydo/`
     Default,
@@ -48,7 +48,7 @@ impl TodoPaths {
 
     /// Resolve the task store root using the priority chain:
     /// 1. `STACKYDO_DIR` env var
-    /// 2. `dir` field in nearest `.stackydo-context`
+    /// 2. `dir` field in nearest `stackydo.json`
     /// 3. `~/.stackydo/`
     pub(crate) fn resolve(start_dir: &Path) -> ResolvedPaths {
         use crate::context::todo_context;
@@ -145,12 +145,12 @@ impl TodoPaths {
         std::fs::create_dir_all(Self::root())
     }
 
-    /// Walk up from `start_dir` looking for a `.stackydo-context` file.
+    /// Walk up from `start_dir` looking for a `stackydo.json` file.
     /// Returns the first one found, or None.
-    pub fn find_todo_context(start_dir: &Path) -> Option<PathBuf> {
+    pub fn find_config(start_dir: &Path) -> Option<PathBuf> {
         let mut current = start_dir.to_path_buf();
         loop {
-            let candidate = current.join(".stackydo-context");
+            let candidate = current.join("stackydo.json");
             if candidate.is_file() {
                 return Some(candidate);
             }
@@ -161,11 +161,11 @@ impl TodoPaths {
         None
     }
 
-    /// Fallback ~/.stackydo-context path
-    pub fn home_todo_context() -> PathBuf {
+    /// Fallback `~/.stackydo.json` path
+    pub fn home_config() -> PathBuf {
         dirs::home_dir()
             .expect("Cannot determine home directory")
-            .join(".stackydo-context")
+            .join(".stackydo.json")
     }
 }
 
@@ -177,8 +177,8 @@ mod tests {
     #[test]
     fn test_resolve_with_config_dir() {
         let tmp = tempfile::tempdir().unwrap();
-        let config_content = "dir: ./my-workspace\nproject: test\n";
-        fs::write(tmp.path().join(".stackydo-context"), config_content).unwrap();
+        let config_content = r#"{"dir": "./my-workspace", "context": {"project": "test"}}"#;
+        fs::write(tmp.path().join("stackydo.json"), config_content).unwrap();
 
         // Temporarily unset STACKYDO_DIR to test config resolution
         let old_env = std::env::var("STACKYDO_DIR").ok();
@@ -190,7 +190,10 @@ mod tests {
         assert!(resolved.config.is_some());
         let cfg = resolved.config.unwrap();
         assert_eq!(cfg.config.dir.as_deref(), Some("./my-workspace"));
-        assert_eq!(cfg.config.project.as_deref(), Some("test"));
+        assert_eq!(
+            cfg.config.context.as_ref().and_then(|c| c.project.as_deref()),
+            Some("test")
+        );
 
         // Restore env
         if let Some(val) = old_env {
@@ -201,8 +204,8 @@ mod tests {
     #[test]
     fn test_resolve_env_overrides_config() {
         let tmp = tempfile::tempdir().unwrap();
-        let config_content = "dir: ./my-workspace\n";
-        fs::write(tmp.path().join(".stackydo-context"), config_content).unwrap();
+        let config_content = r#"{"dir": "./my-workspace"}"#;
+        fs::write(tmp.path().join("stackydo.json"), config_content).unwrap();
 
         let old_env = std::env::var("STACKYDO_DIR").ok();
         std::env::set_var("STACKYDO_DIR", "/tmp/env-override");
@@ -221,7 +224,7 @@ mod tests {
     #[test]
     fn test_resolve_default_no_config() {
         let tmp = tempfile::tempdir().unwrap();
-        // No .stackydo-context file
+        // No stackydo.json file
 
         let old_env = std::env::var("STACKYDO_DIR").ok();
         std::env::remove_var("STACKYDO_DIR");
@@ -238,8 +241,8 @@ mod tests {
     #[test]
     fn test_resolve_config_without_dir_field() {
         let tmp = tempfile::tempdir().unwrap();
-        let config_content = "project: test\nstack: dev\n";
-        fs::write(tmp.path().join(".stackydo-context"), config_content).unwrap();
+        let config_content = r#"{"stack_filter": "dev", "context": {"project": "test"}}"#;
+        fs::write(tmp.path().join("stackydo.json"), config_content).unwrap();
 
         let old_env = std::env::var("STACKYDO_DIR").ok();
         std::env::remove_var("STACKYDO_DIR");
@@ -255,12 +258,12 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_freeform_text_config() {
+    fn test_resolve_invalid_json_config() {
         let tmp = tempfile::tempdir().unwrap();
-        // Not valid YAML key-value pairs — just freeform text
+        // Invalid JSON — should fall through to default root
         fs::write(
-            tmp.path().join(".stackydo-context"),
-            "This is just some notes about the project.\nNo YAML here.",
+            tmp.path().join("stackydo.json"),
+            "this is not json { garbage",
         )
         .unwrap();
 
@@ -268,12 +271,12 @@ mod tests {
         std::env::remove_var("STACKYDO_DIR");
 
         let resolved = TodoPaths::resolve(tmp.path());
-        // Freeform text → config with all None fields → default root
+        // Invalid JSON → all-None config → default root
         assert_eq!(resolved.source, ResolutionSource::Default);
         assert!(resolved.config.is_some());
         let cfg = resolved.config.unwrap();
         assert!(cfg.config.dir.is_none());
-        assert!(cfg.raw_content.contains("just some notes"));
+        assert!(cfg.raw_content.contains("not json"));
 
         if let Some(val) = old_env {
             std::env::set_var("STACKYDO_DIR", val);

@@ -40,7 +40,7 @@ Many tags per task. Comma-separated. Good for filtering across stacks.
 - **related_to** — loose association
 
 ### Context
-Auto-captured at creation: git branch, remote, commit, working directory. Also discovers `.stackydo-context` files by walking up from CWD.
+Auto-captured at creation: git branch, remote, commit, working directory. Also discovers `stackydo.json` files by walking up from CWD.
 
 ## When to Create Tasks
 

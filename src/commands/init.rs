@@ -6,6 +6,21 @@ use crate::storage::manifest_store::ManifestStore;
 use std::fs;
 use std::path::PathBuf;
 
+/// Minimal template written inside the workspace directory itself.
+/// References the schema so editors can provide field completion/documentation.
+const WORKSPACE_CONFIG_TEMPLATE: &str = concat!(
+    "{\n",
+    "  \"$schema\": \"https://raw.githubusercontent.com/kythin/stackydo-cli/main/schemas/stackydo.schema.json\"\n",
+    "}\n"
+);
+
+/// Project-level `stackydo.json` template written in CWD when `--here` is used.
+fn project_config_template(dir: &str) -> String {
+    format!(
+        "{{\n  \"$schema\": \"https://raw.githubusercontent.com/kythin/stackydo-cli/main/schemas/stackydo.schema.json\",\n  \"dir\": \"{dir}\"\n}}\n"
+    )
+}
+
 pub fn execute(args: &InitArgs) -> Result<()> {
     let root = if let Some(ref dir) = args.dir {
         PathBuf::from(dir)
@@ -33,13 +48,13 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         created.push(format!("Manifest exists: {}", manifest_path.display()));
     }
 
-    // 3. Create .stackydo-context template inside the workspace
-    let context_path = root.join(".stackydo-context");
-    if !context_path.exists() {
+    // 3. Create stackydo.json template inside the workspace
+    let config_path = root.join("stackydo.json");
+    if !config_path.exists() {
         let should_create = if args.yes {
             true
         } else {
-            print!("Create .stackydo-context template? [Y/n] ");
+            print!("Create stackydo.json config template? [Y/n] ");
             let mut input = String::new();
             std::io::stdin().read_line(&mut input)?;
             let input = input.trim().to_lowercase();
@@ -47,11 +62,8 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         };
 
         if should_create {
-            fs::write(
-                &context_path,
-                "# Stackydo context\n# Lines here are captured as context for new tasks.\n",
-            )?;
-            created.push(format!("Created context template: {}", context_path.display()));
+            fs::write(&config_path, WORKSPACE_CONFIG_TEMPLATE)?;
+            created.push(format!("Created config: {}", config_path.display()));
         }
     }
 
@@ -62,7 +74,6 @@ pub fn execute(args: &InitArgs) -> Result<()> {
             created.push("Git already initialized.".to_string());
         } else {
             git2::Repository::init(&root)?;
-            // Create .gitignore
             let gitignore_path = root.join(".gitignore");
             if !gitignore_path.exists() {
                 fs::write(&gitignore_path, "# stackydo gitignore\n")?;
@@ -71,31 +82,27 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         }
     }
 
-    // 5. Write .stackydo-context in CWD when --here is passed
+    // 5. Write stackydo.json in CWD when --here is passed
     if args.here {
         let dir_value = args.dir.as_deref().unwrap_or(".stackydo");
-        let cwd_context_path = std::env::current_dir()
+        let cwd_config_path = std::env::current_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
-            .join(".stackydo-context");
+            .join("stackydo.json");
 
-        if cwd_context_path.exists() {
+        if cwd_config_path.exists() {
             // Parse existing file, update/add the dir field, and re-write
-            let existing = fs::read_to_string(&cwd_context_path)?;
+            let existing = fs::read_to_string(&cwd_config_path)?;
             let mut config: StackydoConfig =
-                serde_yaml::from_str(&existing).unwrap_or_default();
+                serde_json::from_str(&existing).unwrap_or_default();
             config.dir = Some(dir_value.to_string());
-            let new_content = serde_yaml::to_string(&config)
-                .unwrap_or_else(|_| format!("dir: {dir_value}\n"));
-            fs::write(&cwd_context_path, new_content)?;
-            created.push(format!(
-                "Updated .stackydo-context: dir = {dir_value}"
-            ));
+            let new_content = serde_json::to_string_pretty(&config)
+                .unwrap_or_else(|_| format!("{{\"dir\": \"{dir_value}\"}}\n"));
+            fs::write(&cwd_config_path, format!("{new_content}\n"))?;
+            created.push(format!("Updated stackydo.json: dir = {dir_value}"));
         } else {
-            let content = format!("dir: {dir_value}\n");
-            fs::write(&cwd_context_path, content)?;
-            created.push(format!(
-                "Created .stackydo-context: dir = {dir_value}"
-            ));
+            let content = project_config_template(dir_value);
+            fs::write(&cwd_config_path, content)?;
+            created.push(format!("Created stackydo.json: dir = {dir_value}"));
         }
     }
 
@@ -108,7 +115,7 @@ pub fn execute(args: &InitArgs) -> Result<()> {
     // 7. Hint about how to use the workspace
     if args.dir.is_some() && !args.here {
         println!("\nTo use this workspace, either:");
-        println!("  1. Run `stackydo init --here --dir {}` to write a .stackydo-context", root.display());
+        println!("  1. Run `stackydo init --here --dir {}` to write a stackydo.json", root.display());
         println!("  2. export STACKYDO_DIR=\"{}\"  (per-session override)", root.display());
     }
 

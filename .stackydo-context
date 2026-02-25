@@ -1,5 +1,0 @@
-dir: .stackydo-workspace
-project: stackydo
-repo: kythin-todo-cli
-stack: dev
-description: Context-aware CLI task manager (Rust). Use the 'dev' stack for development work on this project.

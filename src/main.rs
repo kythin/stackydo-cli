@@ -4,7 +4,7 @@ use stackydo::commands;
 use stackydo::storage::paths::TodoPaths;
 
 fn main() {
-    // Resolve task store root from env / .stackydo-context / default
+    // Resolve task store root from env / stackydo.json / default
     TodoPaths::init();
 
     // Ensure storage directory exists
@@ -54,6 +54,9 @@ fn main() {
         }
         Some(Commands::Import(ref args)) => {
             commands::import::execute(args)
+        }
+        Some(Commands::McpSetup(ref args)) => {
+            commands::mcp_setup::execute(args)
         }
     };
 

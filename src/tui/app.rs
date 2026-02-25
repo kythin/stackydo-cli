@@ -256,6 +256,19 @@ impl App {
             indices.retain(|&i| self.all_tasks[i].frontmatter.priority.as_ref() == Some(pri));
         }
 
+        // Apply stack_filter from stackydo.json
+        if let Some(ref pattern) = crate::storage::paths::TodoPaths::resolved_config()
+            .and_then(|c| c.config.stack_filter.as_deref())
+            .map(str::to_string)
+        {
+            indices.retain(|&i| {
+                crate::commands::util::stack_filter_matches(
+                    pattern,
+                    self.all_tasks[i].frontmatter.stack.as_deref(),
+                )
+            });
+        }
+
         // Search filter
         if let Some(ref query) = self.search_query {
             let q = query.to_lowercase();

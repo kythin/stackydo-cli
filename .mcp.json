@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "stackydo-cargo": {
+      "type": "stdio",
+      "command": "cargo",
+      "args": [
+        "run",
+        "--bin",
+        "stackydo-mcp"
+      ],
+      "env": {}
+    }
+  }
+}

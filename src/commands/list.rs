@@ -1,5 +1,8 @@
 use crate::cli::args::ListArgs;
-use crate::commands::util::{format_task_row, parse_due_date, print_json, print_json_array};
+use crate::commands::util::{
+    active_stack_filter, format_task_row, parse_due_date, print_json, print_json_array,
+    stack_filter_matches,
+};
 use crate::error::{Result, TodoError};
 use crate::model::task::{Priority, TaskJson, TaskStatus};
 use crate::storage::task_store::TaskStore;
@@ -9,6 +12,11 @@ use std::collections::BTreeMap;
 pub fn execute(args: &ListArgs) -> Result<()> {
     let store = TaskStore::new();
     let mut tasks = store.load_all()?;
+
+    // Apply stack_filter from stackydo.json (before CLI flags)
+    if let Some(ref pattern) = active_stack_filter() {
+        tasks.retain(|t| stack_filter_matches(pattern, t.frontmatter.stack.as_deref()));
+    }
 
     // Filter by status
     if let Some(ref status_str) = args.status {
