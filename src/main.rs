@@ -16,8 +16,7 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        // No subcommand → launch TUI
-        None => stackydo::tui::run(),
+        None => unreachable!("clap exits before this point"),
 
         Some(Commands::Create(ref args)) => {
             commands::create::execute(args).map(|_| ())

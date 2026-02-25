@@ -17,6 +17,10 @@ pub struct ManifestSettings {
     /// Max tasks to show in headless `list` output
     #[serde(default = "default_quick_list_limit")]
     pub quick_list_limit: usize,
+
+    /// When true, `delete` marks tasks as deleted instead of removing the file
+    #[serde(default)]
+    pub soft_delete: bool,
 }
 
 fn default_true() -> bool {
@@ -33,6 +37,7 @@ impl Default for ManifestSettings {
             default_filter_status: None,
             auto_capture_git: true,
             quick_list_limit: 50,
+            soft_delete: false,
         }
     }
 }

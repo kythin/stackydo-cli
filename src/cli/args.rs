@@ -2,7 +2,8 @@ use clap::{ArgAction, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "stackydo")]
-#[command(version, about = "Context-aware task manager with TUI — stacks to do!")]
+#[command(version, about = "Context-aware task manager — stacks to do!")]
+#[command(arg_required_else_help = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,

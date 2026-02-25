@@ -3,7 +3,7 @@ use crate::commands::util::{
     active_stack_filter, format_task_row, print_json_array, stack_filter_matches,
 };
 use crate::error::Result;
-use crate::model::task::TaskJson;
+use crate::model::task::{TaskJson, TaskStatus};
 use crate::storage::task_store::TaskStore;
 
 pub fn execute(args: &SearchArgs) -> Result<()> {
@@ -14,6 +14,9 @@ pub fn execute(args: &SearchArgs) -> Result<()> {
     if let Some(ref pattern) = active_stack_filter() {
         results.retain(|t| stack_filter_matches(pattern, t.frontmatter.stack.as_deref()));
     }
+
+    // Exclude soft-deleted tasks
+    results.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
 
     if args.json {
         let json_results: Vec<TaskJson> = results.iter().map(TaskJson::from).collect();

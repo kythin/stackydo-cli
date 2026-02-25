@@ -146,6 +146,11 @@ impl StackydoMcp {
             Err(e) => return err_to_string(e),
         };
 
+        // Hide soft-deleted tasks unless explicitly requested
+        if params.status.as_deref() != Some("deleted") {
+            tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
+        }
+
         // Filter by status
         if let Some(ref status_str) = params.status {
             match status_str.parse::<TaskStatus>() {
@@ -193,6 +198,7 @@ impl StackydoMcp {
                     due < now
                         && t.frontmatter.status != TaskStatus::Done
                         && t.frontmatter.status != TaskStatus::Cancelled
+                        && t.frontmatter.status != TaskStatus::Deleted
                 } else {
                     false
                 }
@@ -451,13 +457,19 @@ impl StackydoMcp {
         }
     }
 
-    #[rmcp::tool(description = "Delete a task permanently.")]
+    #[rmcp::tool(description = "Delete a task. With soft_delete enabled in settings, marks as deleted instead of removing the file.")]
     fn delete_task(
         &self,
         Parameters(params): Parameters<DeleteTaskParams>,
     ) -> String {
         let store = TaskStore::new();
-        let task = match resolve_task_pub(&store, &params.id) {
+        let manifest_store = ManifestStore::new();
+        let soft_delete = manifest_store
+            .load()
+            .map(|m| m.settings.soft_delete)
+            .unwrap_or(false);
+
+        let mut task = match resolve_task_pub(&store, &params.id) {
             Ok(t) => t,
             Err(e) => return err_to_string(e),
         };
@@ -465,18 +477,34 @@ impl StackydoMcp {
         let task_id = task.frontmatter.id.clone();
         let title = task.frontmatter.title.clone();
 
-        // Clear parent's subtask reference
-        if let Some(ref parent_id) = task.frontmatter.parent_id {
-            if let Ok(mut parent) = store.load(parent_id) {
-                parent.frontmatter.subtask_ids.retain(|s| s != &task_id);
-                parent.frontmatter.modified = Utc::now();
-                let _ = store.save(&parent);
+        if soft_delete {
+            task.frontmatter.status = TaskStatus::Deleted;
+            task.frontmatter.modified = Utc::now();
+            match store.save(&task) {
+                Ok(()) => format!("Soft-deleted: {} — {}", &task_id[..10], title),
+                Err(e) => err_to_string(e),
             }
-        }
+        } else {
+            // Clear parent's subtask reference
+            if let Some(ref parent_id) = task.frontmatter.parent_id {
+                if let Ok(mut parent) = store.load(parent_id) {
+                    parent.frontmatter.subtask_ids.retain(|s| s != &task_id);
+                    parent.frontmatter.modified = Utc::now();
+                    let _ = store.save(&parent);
+                }
+            }
 
-        match store.delete(&task_id) {
-            Ok(()) => format!("Deleted: {} — {}", &task_id[..10], title),
-            Err(e) => err_to_string(e),
+            match store.delete(&task_id) {
+                Ok(()) => {
+                    // Prune stacks/tags; load_all includes soft-deleted tasks so their
+                    // stacks/tags remain alive even after a hard delete of sibling tasks.
+                    if let Ok(remaining) = store.load_all() {
+                        let _ = manifest_store.prune_stacks_and_tags(&remaining);
+                    }
+                    format!("Deleted: {} — {}", &task_id[..10], title)
+                }
+                Err(e) => err_to_string(e),
+            }
         }
     }
 
@@ -487,7 +515,8 @@ impl StackydoMcp {
     ) -> String {
         let store = TaskStore::new();
         match store.search(&params.query) {
-            Ok(tasks) => {
+            Ok(mut tasks) => {
+                tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
                 let json_tasks: Vec<TaskJson> = tasks.iter().map(TaskJson::from).collect();
                 serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
             }
@@ -498,10 +527,11 @@ impl StackydoMcp {
     #[rmcp::tool(description = "Get summary statistics: total tasks, overdue count, breakdown by status/stack/tag.")]
     fn get_stats(&self) -> String {
         let store = TaskStore::new();
-        let tasks = match store.load_all() {
+        let mut tasks = match store.load_all() {
             Ok(t) => t,
             Err(e) => return err_to_string(e),
         };
+        tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
         let now = Utc::now();
 
         let total = tasks.len();
@@ -556,10 +586,11 @@ impl StackydoMcp {
     fn get_stacks(&self) -> String {
         let store = TaskStore::new();
         let manifest_store = ManifestStore::new();
-        let tasks = match store.load_all() {
+        let mut tasks = match store.load_all() {
             Ok(t) => t,
             Err(e) => return err_to_string(e),
         };
+        tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
         let manifest = match manifest_store.load() {
             Ok(m) => m,
             Err(e) => return err_to_string(e),

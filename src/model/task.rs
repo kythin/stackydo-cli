@@ -10,6 +10,7 @@ pub enum TaskStatus {
     Done,
     Blocked,
     Cancelled,
+    Deleted,
 }
 
 impl std::str::FromStr for TaskStatus {
@@ -21,8 +22,9 @@ impl std::str::FromStr for TaskStatus {
             "done" => Ok(Self::Done),
             "blocked" => Ok(Self::Blocked),
             "cancelled" | "canceled" => Ok(Self::Cancelled),
+            "deleted" => Ok(Self::Deleted),
             _ => Err(format!(
-                "Invalid status: {s}. Use: todo, in_progress, done, blocked, cancelled"
+                "Invalid status: {s}. Use: todo, in_progress, done, blocked, cancelled, deleted"
             )),
         }
     }
@@ -36,6 +38,7 @@ impl std::fmt::Display for TaskStatus {
             Self::Done => write!(f, "done"),
             Self::Blocked => write!(f, "blocked"),
             Self::Cancelled => write!(f, "cancelled"),
+            Self::Deleted => write!(f, "deleted"),
         }
     }
 }

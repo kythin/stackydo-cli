@@ -31,6 +31,9 @@ pub fn execute(args: &StatsArgs) -> Result<()> {
         tasks.retain(|t| stack_filter_matches(pattern, t.frontmatter.stack.as_deref()));
     }
 
+    // Exclude soft-deleted tasks from stats
+    tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
+
     let now = Utc::now();
 
     let total = tasks.len();

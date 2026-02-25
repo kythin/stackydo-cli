@@ -1,9 +1,9 @@
 [package]
 name = "stackydo"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.70"
-description = "Context-aware CLI task manager with TUI — stacky do!"
+description = "Context-aware CLI task manager — stacky do!"
 license = "MIT"
 repository = "https://github.com/kythin/stackydo-cli"
 homepage = "https://github.com/kythin/stackydo-cli"
@@ -20,10 +20,6 @@ path = "src/mcp_bin.rs"
 [dependencies]
 # CLI
 clap = { version = "4.4", features = ["derive"] }
-
-# TUI
-ratatui = "0.26"
-crossterm = "0.27"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

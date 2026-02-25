@@ -4,6 +4,7 @@ use crate::model::config::StackydoConfig;
 use crate::model::manifest::Manifest;
 use crate::storage::manifest_store::ManifestStore;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 
 /// Minimal template written inside the workspace directory itself.
@@ -71,14 +72,73 @@ pub fn execute(args: &InitArgs) -> Result<()> {
     if args.git {
         let git_dir = root.join(".git");
         if git_dir.exists() {
-            created.push("Git already initialized.".to_string());
+            created.push("Git already initialized in workspace.".to_string());
         } else {
             git2::Repository::init(&root)?;
             let gitignore_path = root.join(".gitignore");
             if !gitignore_path.exists() {
-                fs::write(&gitignore_path, "# stackydo gitignore\n")?;
+                fs::write(&gitignore_path, "# stackydo workspace\n")?;
             }
-            created.push("Initialized git repository.".to_string());
+            created.push(format!("Initialized git repository: {}", root.display()));
+        }
+
+        // Add the workspace to the parent repo's .gitignore so the workspace's
+        // own git history isn't tracked by the project repo.
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        if let Ok(parent_repo) = git2::Repository::discover(&cwd) {
+            if let Some(workdir) = parent_repo.workdir() {
+                // Resolve absolute paths; use cwd.join(root) as fallback for
+                // relative paths before the dir existed.
+                let abs_root = root
+                    .canonicalize()
+                    .unwrap_or_else(|_| cwd.join(&root));
+                let abs_workdir = workdir
+                    .canonicalize()
+                    .unwrap_or_else(|_| workdir.to_path_buf());
+
+                // Only act if the workspace lives inside the parent repo.
+                if abs_root.starts_with(&abs_workdir) && abs_root != abs_workdir {
+                    let rel = abs_root.strip_prefix(&abs_workdir).unwrap();
+                    // Anchor the entry to the repo root with a leading slash.
+                    let entry = format!("/{}", rel.display());
+                    let rel_str = rel.to_string_lossy();
+
+                    let parent_gitignore = abs_workdir.join(".gitignore");
+                    let existing = if parent_gitignore.exists() {
+                        fs::read_to_string(&parent_gitignore).unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
+
+                    // Check for the entry in any common form.
+                    let already_ignored = existing.lines().any(|l| {
+                        let l = l.trim();
+                        l == rel_str.as_ref()
+                            || l == entry.as_str()
+                            || l == format!("{rel_str}/")
+                            || l == format!("{entry}/")
+                    });
+
+                    if already_ignored {
+                        created.push(format!("'{rel_str}' already in parent .gitignore"));
+                    } else {
+                        let line = if existing.is_empty() || existing.ends_with('\n') {
+                            format!("{entry}\n")
+                        } else {
+                            format!("\n{entry}\n")
+                        };
+                        fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&parent_gitignore)?
+                            .write_all(line.as_bytes())?;
+                        created.push(format!(
+                            "Added '{entry}' to {}",
+                            parent_gitignore.display()
+                        ));
+                    }
+                }
+            }
         }
     }
 
@@ -119,15 +179,16 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         println!("  2. export STACKYDO_DIR=\"{}\"  (per-session override)", root.display());
     }
 
-    // Check if we're in a git repo and suggest submodule approach
-    if let Ok(repo) = git2::Repository::discover(".") {
-        if let Some(workdir) = repo.workdir() {
-            if root != workdir.join(".stackydo") {
-                println!("\nTip: You can track your tasks as a git submodule:");
-                println!(
-                    "  git submodule add <remote-url> {}",
-                    root.display()
-                );
+    // Suggest submodule approach only when --git wasn't used.
+    if !args.git {
+        if let Ok(repo) = git2::Repository::discover(".") {
+            if let Some(workdir) = repo.workdir() {
+                if root != workdir.join(".stackydo") {
+                    println!("\nTip: Use --git to initialise the workspace as its own git repo");
+                    println!("     and automatically add it to the parent .gitignore, or track");
+                    println!("     tasks as a git submodule:");
+                    println!("       git submodule add <remote-url> {}", root.display());
+                }
             }
         }
     }

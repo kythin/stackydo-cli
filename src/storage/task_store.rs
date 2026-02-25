@@ -284,6 +284,7 @@ mod proptest_tests {
             Just(TaskStatus::Done),
             Just(TaskStatus::Blocked),
             Just(TaskStatus::Cancelled),
+            Just(TaskStatus::Deleted),
         ]
     }
 

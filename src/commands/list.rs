@@ -18,6 +18,11 @@ pub fn execute(args: &ListArgs) -> Result<()> {
         tasks.retain(|t| stack_filter_matches(pattern, t.frontmatter.stack.as_deref()));
     }
 
+    // Hide soft-deleted tasks unless explicitly requested
+    if args.status.as_deref() != Some("deleted") {
+        tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
+    }
+
     // Filter by status
     if let Some(ref status_str) = args.status {
         let s = status_str
@@ -57,7 +62,7 @@ pub fn execute(args: &ListArgs) -> Result<()> {
         });
     }
 
-    // Filter: overdue (due < now, not done/cancelled)
+    // Filter: overdue (due < now, not done/cancelled/deleted)
     if args.overdue {
         let now = Utc::now();
         tasks.retain(|t| {
@@ -65,6 +70,7 @@ pub fn execute(args: &ListArgs) -> Result<()> {
                 due < now
                     && t.frontmatter.status != TaskStatus::Done
                     && t.frontmatter.status != TaskStatus::Cancelled
+                    && t.frontmatter.status != TaskStatus::Deleted
             } else {
                 false
             }

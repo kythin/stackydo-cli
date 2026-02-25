@@ -1,6 +1,8 @@
 use crate::error::Result;
 use crate::model::manifest::Manifest;
+use crate::model::task::Task;
 use crate::storage::paths::TodoPaths;
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
@@ -60,6 +62,30 @@ impl ManifestStore {
         let mut manifest = self.load()?;
         manifest.stacks.insert(stack.to_string());
         self.save(&manifest)
+    }
+
+    /// Remove stacks and tags from the manifest that are no longer referenced
+    /// by any of the given tasks. Call after deleting one or more tasks.
+    pub fn prune_stacks_and_tags(&self, remaining_tasks: &[Task]) -> Result<()> {
+        let mut manifest = self.load()?;
+
+        let used_stacks: BTreeSet<&str> = remaining_tasks
+            .iter()
+            .filter_map(|t| t.frontmatter.stack.as_deref())
+            .collect();
+        let used_tags: BTreeSet<&str> = remaining_tasks
+            .iter()
+            .flat_map(|t| t.frontmatter.tags.iter().map(String::as_str))
+            .collect();
+
+        let before = (manifest.stacks.len(), manifest.tags.len());
+        manifest.stacks.retain(|s| used_stacks.contains(s.as_str()));
+        manifest.tags.retain(|t| used_tags.contains(t.as_str()));
+
+        if (manifest.stacks.len(), manifest.tags.len()) != before {
+            self.save(&manifest)?;
+        }
+        Ok(())
     }
 }
 

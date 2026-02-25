@@ -2,14 +2,20 @@ use crate::cli::args::DeleteArgs;
 use crate::commands::util::matches_filters;
 use crate::error::{Result, TodoError};
 use crate::model::task::TaskStatus;
+use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
 
 pub fn execute(args: &DeleteArgs) -> Result<()> {
     let store = TaskStore::new();
+    let manifest_store = ManifestStore::new();
+    let soft_delete = manifest_store
+        .load()
+        .map(|m| m.settings.soft_delete)
+        .unwrap_or(false);
 
     // Single-task mode
     if let Some(ref id) = args.id {
-        let task = crate::commands::show::resolve_task_pub(&store, id)?;
+        let mut task = crate::commands::show::resolve_task_pub(&store, id)?;
 
         // Warn about orphaned subtasks
         if !task.frontmatter.subtask_ids.is_empty() {
@@ -41,17 +47,26 @@ pub fn execute(args: &DeleteArgs) -> Result<()> {
             }
         }
 
-        // Clear parent's subtask reference if this task has a parent
-        if let Some(ref parent_id) = task.frontmatter.parent_id {
-            if let Ok(mut parent) = store.load(parent_id) {
-                parent.frontmatter.subtask_ids.retain(|s| s != &task.frontmatter.id);
-                parent.frontmatter.modified = chrono::Utc::now();
-                let _ = store.save(&parent);
+        if soft_delete {
+            task.frontmatter.status = TaskStatus::Deleted;
+            task.frontmatter.modified = chrono::Utc::now();
+            store.save(&task)?;
+            println!("Soft-deleted: {}", &task.frontmatter.id[..10]);
+        } else {
+            // Clear parent's subtask reference if this task has a parent
+            if let Some(ref parent_id) = task.frontmatter.parent_id {
+                if let Ok(mut parent) = store.load(parent_id) {
+                    parent.frontmatter.subtask_ids.retain(|s| s != &task.frontmatter.id);
+                    parent.frontmatter.modified = chrono::Utc::now();
+                    let _ = store.save(&parent);
+                }
             }
-        }
 
-        store.delete(&task.frontmatter.id)?;
-        println!("Deleted: {}", &task.frontmatter.id[..10]);
+            store.delete(&task.frontmatter.id)?;
+            println!("Deleted: {}", &task.frontmatter.id[..10]);
+            let remaining = store.load_all()?;
+            manifest_store.prune_stacks_and_tags(&remaining)?;
+        }
         return Ok(());
     }
 
@@ -82,26 +97,52 @@ pub fn execute(args: &DeleteArgs) -> Result<()> {
     let tag_filter = args.tag.as_deref();
     let stack_filter = args.stack.as_deref();
 
-    let tasks = store.load_all()?;
+    let mut tasks = store.load_all()?;
     let mut count = 0;
 
-    for task in &tasks {
-        if matches_filters(task, status_filter.as_ref(), tag_filter, stack_filter) {
-            store.delete(&task.frontmatter.id)?;
-            println!(
-                "  Deleted: {} — {}",
-                &task.frontmatter.id[..10],
-                task.frontmatter.title
-            );
-            count += 1;
+    if soft_delete {
+        for task in &mut tasks {
+            if matches_filters(task, status_filter.as_ref(), tag_filter, stack_filter) {
+                task.frontmatter.status = TaskStatus::Deleted;
+                task.frontmatter.modified = chrono::Utc::now();
+                store.save(task)?;
+                println!(
+                    "  Soft-deleted: {} — {}",
+                    &task.frontmatter.id[..10],
+                    task.frontmatter.title
+                );
+                count += 1;
+            }
+        }
+        println!(
+            "\nSoft-deleted {} task{}.",
+            count,
+            if count == 1 { "" } else { "s" }
+        );
+    } else {
+        for task in &tasks {
+            if matches_filters(task, status_filter.as_ref(), tag_filter, stack_filter) {
+                store.delete(&task.frontmatter.id)?;
+                println!(
+                    "  Deleted: {} — {}",
+                    &task.frontmatter.id[..10],
+                    task.frontmatter.title
+                );
+                count += 1;
+            }
+        }
+
+        println!(
+            "\nDeleted {} task{}.",
+            count,
+            if count == 1 { "" } else { "s" }
+        );
+
+        if count > 0 {
+            let remaining = store.load_all()?;
+            manifest_store.prune_stacks_and_tags(&remaining)?;
         }
     }
-
-    println!(
-        "\nDeleted {} task{}.",
-        count,
-        if count == 1 { "" } else { "s" }
-    );
 
     Ok(())
 }
