@@ -1,0 +1,26 @@
+{
+  "name": "stackydo",
+  "version": "0.1.2",
+  "description": "Context-aware task management for Claude Code — create, triage, and track tasks with stackydo's TUI, CLI, and MCP server",
+  "author": {
+    "name": "kythin",
+    "url": "https://github.com/kythin"
+  },
+  "repository": "https://github.com/kythin/stackydo-cli",
+  "license": "MIT",
+  "keywords": [
+    "tasks",
+    "todo",
+    "productivity",
+    "task-manager",
+    "mcp",
+    "tui",
+    "context-aware"
+  ],
+  "components": {
+    "commands": true,
+    "agents": true,
+    "skills": true,
+    "mcp": true
+  }
+}

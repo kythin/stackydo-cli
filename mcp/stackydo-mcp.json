@@ -1,0 +1,9 @@
+{
+  "name": "stackydo-mcp",
+  "description": "Stackydo MCP server — task management tools, prompts, and resources over stdio",
+  "transport": "stdio",
+  "command": "stackydo-mcp",
+  "args": [],
+  "env": {},
+  "notes": "Requires the stackydo-mcp binary on PATH. Install via: cargo install --path . or brew install kythin/tap/stackydo. Set STACKYDO_DIR env var to target a specific task store."
+}
