@@ -23,8 +23,16 @@ fn project_config_template(dir: &str) -> String {
 }
 
 pub fn execute(args: &InitArgs) -> Result<()> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    // Auto-detect project-local mode: if at a git repo root and no flags override it.
+    let is_git_root = args.dir.is_none() && !args.here && cwd.join(".git").exists();
+    let effective_here = args.here || is_git_root;
+
     let root = if let Some(ref dir) = args.dir {
         PathBuf::from(dir)
+    } else if effective_here {
+        cwd.join(".stackydo") // project-local workspace
     } else {
         crate::storage::paths::TodoPaths::root()
     };
@@ -52,7 +60,7 @@ pub fn execute(args: &InitArgs) -> Result<()> {
     // 3. Create stackydo.json template inside the workspace
     let config_path = root.join("stackydo.json");
     if !config_path.exists() {
-        let should_create = if args.yes {
+        let should_create = if args.yes || effective_here {
             true
         } else {
             print!("Create stackydo.json config template? [Y/n] ");
@@ -85,7 +93,6 @@ pub fn execute(args: &InitArgs) -> Result<()> {
 
         // Add the workspace to the parent repo's .gitignore so the workspace's
         // own git history isn't tracked by the project repo.
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         if let Ok(parent_repo) = git2::Repository::discover(&cwd) {
             if let Some(workdir) = parent_repo.workdir() {
                 // Resolve absolute paths; use cwd.join(root) as fallback for
@@ -143,12 +150,10 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         }
     }
 
-    // 5. Write stackydo.json in CWD when --here is passed
-    if args.here {
+    // 5. Write stackydo.json in CWD when --here or auto-here is active
+    if effective_here {
         let dir_value = args.dir.as_deref().unwrap_or(".stackydo");
-        let cwd_config_path = std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("stackydo.json");
+        let cwd_config_path = cwd.join("stackydo.json");
 
         if cwd_config_path.exists() {
             // Parse existing file, update/add the dir field, and re-write
@@ -167,16 +172,56 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         }
     }
 
-    // 6. Print summary
+    // 6. Auto-add storage dir to .gitignore when in project-local mode at a git root
+    if effective_here && cwd.join(".git").exists() {
+        let dir_value = args.dir.as_deref().unwrap_or(".stackydo");
+        let entry = format!("/{dir_value}");
+        let gitignore_path = cwd.join(".gitignore");
+        let existing = if gitignore_path.exists() {
+            fs::read_to_string(&gitignore_path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let already_ignored = existing.lines().any(|l| {
+            let l = l.trim();
+            l == dir_value
+                || l == entry.as_str()
+                || l == format!("{dir_value}/")
+                || l == format!("{entry}/")
+        });
+        if !already_ignored {
+            let line = if existing.is_empty() || existing.ends_with('\n') {
+                format!("{entry}\n")
+            } else {
+                format!("\n{entry}\n")
+            };
+            fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&gitignore_path)?
+                .write_all(line.as_bytes())?;
+            created.push(format!("Added '{entry}' to .gitignore"));
+        } else {
+            created.push(format!("'{dir_value}' already in .gitignore"));
+        }
+    }
+
+    // 7. Print summary
+    if is_git_root {
+        println!("Note: git repository root detected — using project-local mode (--here).");
+    }
     println!("Stackydo workspace initialized:");
     for line in &created {
         println!("  {line}");
     }
 
-    // 7. Hint about how to use the workspace
-    if args.dir.is_some() && !args.here {
+    // 8. Hint about how to use the workspace
+    if args.dir.is_some() && !effective_here {
         println!("\nTo use this workspace, either:");
-        println!("  1. Run `stackydo init --here --dir {}` to write a stackydo.json", root.display());
+        println!(
+            "  1. Run `stackydo init --here --dir {}` to write a stackydo.json",
+            root.display()
+        );
         println!("  2. export STACKYDO_DIR=\"{}\"  (per-session override)", root.display());
     }
 
