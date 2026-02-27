@@ -1,0 +1,15 @@
+{
+  "name": "stackydo",
+  "repo": "kythin/stackydo-cli",
+  "desc": "Context-aware CLI task manager with TUI",
+  "license": "MIT",
+  "binaries": ["stackydo", "stackydo-mcp"],
+  "targets": [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu"
+  ],
+  "archive_ext": "tar.xz",
+  "archive_pattern": "{name}-{target}.{ext}"
+}

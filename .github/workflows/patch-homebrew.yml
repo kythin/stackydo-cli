@@ -1,129 +1,212 @@
-name: Update Homebrew Tap
+name: Patch Homebrew Beta Tap
+
 on:
-  workflow_run:
-    workflows: ["Release"]
-    types: [completed]
+  workflow_dispatch:
 
 jobs:
   update-tap:
-    # Only run when Release workflow succeeded on a version tag
-    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') }}
     runs-on: ubuntu-latest
     steps:
-      - name: Download release archives from source repo
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ github.event.workflow_run.head_branch }}"
-          gh release download "$VERSION" \
-            --repo kythin/stackydo-cli \
-            --pattern "*.tar.xz" \
-            --dir artifacts
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .homebrew-tap.json
+          sparse-checkout-cone-mode: false
 
-      - name: Upload binaries to beta tap release and update formula
+      - name: Read config and update beta tap
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_BETA_TOKEN }}
         run: |
-          VERSION="${{ github.event.workflow_run.head_branch }}"
+          set -euo pipefail
+
+          CONFIG=".homebrew-tap.json"
+          NAME=$(jq -r '.name' "$CONFIG")
+          REPO=$(jq -r '.repo' "$CONFIG")
+          DESC=$(jq -r '.desc' "$CONFIG")
+          LICENSE=$(jq -r '.license' "$CONFIG")
+          ARCHIVE_EXT=$(jq -r '.archive_ext' "$CONFIG")
+          ARCHIVE_PATTERN=$(jq -r '.archive_pattern' "$CONFIG")
+          readarray -t TARGETS < <(jq -r '.targets[]' "$CONFIG")
+          readarray -t BINARIES < <(jq -r '.binaries[]' "$CONFIG")
+
+          TAP_REPO="kythin/homebrew-tap-beta"
+
+          # Get latest release tag
+          VERSION=$(gh release list --repo "$REPO" --limit 1 --json tagName --jq '.[0].tagName')
+          if [ -z "$VERSION" ]; then
+            echo "No releases found for $REPO"
+            exit 1
+          fi
           CLEAN_VERSION="${VERSION#v}"
-          TAP_TAG="stackydo-${VERSION}"
+          TAP_TAG="${NAME}-${VERSION}"
 
-          # Compute SHAs from the build artifacts
-          SHA_ARM_MAC=$(sha256sum artifacts/stackydo-aarch64-apple-darwin.tar.xz | cut -d ' ' -f 1)
-          SHA_INTEL_MAC=$(sha256sum artifacts/stackydo-x86_64-apple-darwin.tar.xz | cut -d ' ' -f 1)
-          SHA_ARM_LINUX=$(sha256sum artifacts/stackydo-aarch64-unknown-linux-gnu.tar.xz | cut -d ' ' -f 1)
-          SHA_INTEL_LINUX=$(sha256sum artifacts/stackydo-x86_64-unknown-linux-gnu.tar.xz | cut -d ' ' -f 1)
+          echo "Processing ${NAME} ${VERSION}..."
 
-          echo "aarch64-apple-darwin: ${SHA_ARM_MAC}"
-          echo "x86_64-apple-darwin: ${SHA_INTEL_MAC}"
-          echo "aarch64-unknown-linux-gnu: ${SHA_ARM_LINUX}"
-          echo "x86_64-unknown-linux-gnu: ${SHA_INTEL_LINUX}"
+          # Download release archives
+          mkdir -p artifacts
+          gh release download "$VERSION" \
+            --repo "$REPO" \
+            --pattern "*.${ARCHIVE_EXT}" \
+            --dir artifacts
 
-          # Create release in tap repo (or upload to existing)
-          if gh release view "$TAP_TAG" --repo kythin/homebrew-tap-beta &>/dev/null; then
-            gh release upload "$TAP_TAG" --repo kythin/homebrew-tap-beta --clobber \
-              artifacts/stackydo-*.tar.xz
+          # Compute SHAs
+          declare -A SHA_MAP
+          for TARGET in "${TARGETS[@]}"; do
+            FNAME=$(echo "$ARCHIVE_PATTERN" | sed "s/{name}/${NAME}/g; s/{target}/${TARGET}/g; s/{ext}/${ARCHIVE_EXT}/g")
+            FILE="artifacts/${FNAME}"
+            if [ ! -f "$FILE" ]; then
+              # Fallback: find file containing the target name
+              FILE=$(find artifacts -name "*${TARGET}*" -type f | head -1)
+            fi
+            if [ ! -f "$FILE" ]; then
+              echo "WARNING: archive not found for target ${TARGET}"
+              continue
+            fi
+            SHA_MAP[$TARGET]=$(sha256sum "$FILE" | cut -d ' ' -f 1)
+            echo "${TARGET}: ${SHA_MAP[$TARGET]}"
+          done
+
+          # Upload to tap release
+          if gh release view "$TAP_TAG" --repo "$TAP_REPO" &>/dev/null; then
+            gh release upload "$TAP_TAG" --repo "$TAP_REPO" --clobber artifacts/*."${ARCHIVE_EXT}"
           else
             gh release create "$TAP_TAG" \
-              --repo kythin/homebrew-tap-beta \
-              --title "stackydo ${VERSION}" \
-              --notes "stackydo ${VERSION} binaries" \
-              artifacts/stackydo-*.tar.xz
+              --repo "$TAP_REPO" \
+              --title "${NAME} ${VERSION}" \
+              --notes "${NAME} ${VERSION} binaries" \
+              artifacts/*."${ARCHIVE_EXT}"
           fi
 
-          # Get asset IDs from tap repo release
-          ASSETS=$(gh api repos/kythin/homebrew-tap-beta/releases/tags/${TAP_TAG} --jq '.assets[] | "\(.name) \(.id)"')
-          ARM_MAC_ID=$(echo "$ASSETS" | grep "aarch64-apple-darwin.tar.xz " | awk '{print $2}')
-          INTEL_MAC_ID=$(echo "$ASSETS" | grep "x86_64-apple-darwin.tar.xz " | awk '{print $2}')
-          ARM_LINUX_ID=$(echo "$ASSETS" | grep "aarch64-unknown-linux-gnu.tar.xz " | awk '{print $2}')
-          INTEL_LINUX_ID=$(echo "$ASSETS" | grep "x86_64-unknown-linux-gnu.tar.xz " | awk '{print $2}')
+          # Get asset IDs
+          ASSETS=$(gh api "repos/${TAP_REPO}/releases/tags/${TAP_TAG}" --jq '.assets[] | "\(.name) \(.id)"')
+          declare -A ASSET_ID_MAP
+          for TARGET in "${TARGETS[@]}"; do
+            ASSET_ID_MAP[$TARGET]=$(echo "$ASSETS" | grep "$TARGET" | awk '{print $2}')
+          done
 
-          API_BASE="https://api.github.com/repos/kythin/homebrew-tap-beta/releases/assets"
+          API_BASE="https://api.github.com/repos/${TAP_REPO}/releases/assets"
 
-          # Generate the formula
-          cat > stackydo.rb << FORMULA
-          class Stackydo < Formula
-            desc "Context-aware CLI task manager with TUI"
-            homepage "https://github.com/kythin/stackydo-cli"
-            version "${CLEAN_VERSION}"
-            license "MIT"
+          # Capitalize first letter for Ruby class name
+          CLASS_NAME="$(echo "${NAME:0:1}" | tr '[:lower:]' '[:upper:]')${NAME:1}"
 
-            on_macos do
-              if Hardware::CPU.arm?
-                url "${API_BASE}/${ARM_MAC_ID}",
-                    headers: ["Authorization: token #{ENV["HOMEBREW_GITHUB_API_TOKEN"]}", "Accept: application/octet-stream"]
-                sha256 "${SHA_ARM_MAC}"
+          # Classify targets by OS and arch
+          target_os() {
+            case "$1" in
+              *apple-darwin*) echo "macos" ;;
+              *linux*)        echo "linux" ;;
+            esac
+          }
+          target_arch() {
+            case "$1" in
+              aarch64-*) echo "arm" ;;
+              x86_64-*)  echo "intel" ;;
+            esac
+          }
+
+          # Generate formula
+          {
+            echo "class ${CLASS_NAME} < Formula"
+            echo "  desc \"${DESC}\""
+            echo "  homepage \"https://github.com/${REPO}\""
+            echo "  version \"${CLEAN_VERSION}\""
+            echo "  license \"${LICENSE}\""
+
+            # Collect targets by OS
+            MAC_TARGETS=()
+            LINUX_TARGETS=()
+            for TARGET in "${TARGETS[@]}"; do
+              case $(target_os "$TARGET") in
+                macos) MAC_TARGETS+=("$TARGET") ;;
+                linux) LINUX_TARGETS+=("$TARGET") ;;
+              esac
+            done
+
+            # macOS block
+            if [ ${#MAC_TARGETS[@]} -gt 0 ]; then
+              echo ""
+              echo "  on_macos do"
+              FIRST=true
+              for TARGET in "${MAC_TARGETS[@]}"; do
+                ARCH=$(target_arch "$TARGET")
+                if [ "$ARCH" = "arm" ]; then
+                  COND="Hardware::CPU.arm?"
+                else
+                  COND="Hardware::CPU.intel?"
+                fi
+                if [ "$FIRST" = true ]; then
+                  echo "    if ${COND}"
+                  FIRST=false
+                else
+                  echo "    elsif ${COND}"
+                fi
+                echo "      url \"${API_BASE}/${ASSET_ID_MAP[$TARGET]}\","
+                echo "          headers: [\"Authorization: token #{ENV[\"HOMEBREW_GITHUB_API_TOKEN\"]}\", \"Accept: application/octet-stream\"]"
+                echo "      sha256 \"${SHA_MAP[$TARGET]}\""
+              done
+              echo "    end"
+              echo "  end"
+            fi
+
+            # Linux block
+            if [ ${#LINUX_TARGETS[@]} -gt 0 ]; then
+              echo ""
+              echo "  on_linux do"
+              if [ ${#LINUX_TARGETS[@]} -eq 1 ]; then
+                TARGET="${LINUX_TARGETS[0]}"
+                echo "    url \"${API_BASE}/${ASSET_ID_MAP[$TARGET]}\","
+                echo "        headers: [\"Authorization: token #{ENV[\"HOMEBREW_GITHUB_API_TOKEN\"]}\", \"Accept: application/octet-stream\"]"
+                echo "    sha256 \"${SHA_MAP[$TARGET]}\""
               else
-                url "${API_BASE}/${INTEL_MAC_ID}",
-                    headers: ["Authorization: token #{ENV["HOMEBREW_GITHUB_API_TOKEN"]}", "Accept: application/octet-stream"]
-                sha256 "${SHA_INTEL_MAC}"
-              end
-            end
+                FIRST=true
+                for TARGET in "${LINUX_TARGETS[@]}"; do
+                  ARCH=$(target_arch "$TARGET")
+                  if [ "$ARCH" = "arm" ]; then
+                    COND="Hardware::CPU.arm?"
+                  else
+                    COND="Hardware::CPU.intel?"
+                  fi
+                  if [ "$FIRST" = true ]; then
+                    echo "    if ${COND}"
+                    FIRST=false
+                  else
+                    echo "    elsif ${COND}"
+                  fi
+                  echo "      url \"${API_BASE}/${ASSET_ID_MAP[$TARGET]}\","
+                  echo "          headers: [\"Authorization: token #{ENV[\"HOMEBREW_GITHUB_API_TOKEN\"]}\", \"Accept: application/octet-stream\"]"
+                  echo "      sha256 \"${SHA_MAP[$TARGET]}\""
+                done
+                echo "    end"
+              fi
+              echo "  end"
+            fi
 
-            on_linux do
-              if Hardware::CPU.arm?
-                url "${API_BASE}/${ARM_LINUX_ID}",
-                    headers: ["Authorization: token #{ENV["HOMEBREW_GITHUB_API_TOKEN"]}", "Accept: application/octet-stream"]
-                sha256 "${SHA_ARM_LINUX}"
-              else
-                url "${API_BASE}/${INTEL_LINUX_ID}",
-                    headers: ["Authorization: token #{ENV["HOMEBREW_GITHUB_API_TOKEN"]}", "Accept: application/octet-stream"]
-                sha256 "${SHA_INTEL_LINUX}"
-              end
-            end
+            # Install block
+            echo ""
+            echo "  def install"
+            for BIN in "${BINARIES[@]}"; do
+              echo "    bin.install \"${BIN}\""
+            done
+            echo "  end"
 
-            def install
-              bin.install "stackydo"
-              bin.install "stackydo-mcp"
-            end
+            # Test block
+            echo ""
+            echo "  test do"
+            echo "    assert_match version.to_s, shell_output(\"#{bin}/${NAME} --version\")"
+            echo "  end"
+            echo "end"
+          } > "${NAME}.rb"
 
-            test do
-              assert_match version.to_s, shell_output("#{bin}/stackydo --version")
-            end
-          end
-          FORMULA
+          # Push formula to beta tap
+          EXISTING_SHA=$(gh api "repos/${TAP_REPO}/contents/Formula/${NAME}.rb" --jq '.sha' 2>/dev/null || echo "")
+          CONTENT=$(base64 -w 0 "${NAME}.rb")
 
-          # Fix indentation from heredoc
-          sed -i 's/^          //' stackydo.rb
-
-          # Push formula to beta tap repo via GitHub API
-          EXISTING_SHA=$(gh api repos/kythin/homebrew-tap-beta/contents/Formula/stackydo.rb --jq '.sha' 2>/dev/null || echo "")
-
-          CONTENT=$(base64 -w 0 stackydo.rb)
-
+          ARGS=("repos/${TAP_REPO}/contents/Formula/${NAME}.rb"
+            --method PUT
+            -f "message=Update ${NAME} to ${VERSION}"
+            -f "content=${CONTENT}"
+            --silent)
           if [ -n "$EXISTING_SHA" ]; then
-            gh api repos/kythin/homebrew-tap-beta/contents/Formula/stackydo.rb \
-              --method PUT \
-              -f message="Update stackydo to ${VERSION}" \
-              -f content="${CONTENT}" \
-              -f sha="${EXISTING_SHA}" \
-              --silent
-          else
-            gh api repos/kythin/homebrew-tap-beta/contents/Formula/stackydo.rb \
-              --method PUT \
-              -f message="Update stackydo to ${VERSION}" \
-              -f content="${CONTENT}" \
-              --silent
+            ARGS+=(-f "sha=${EXISTING_SHA}")
           fi
 
-          echo "Binaries and formula updated in beta tap successfully"
+          gh api "${ARGS[@]}"
+          echo "${NAME} ${VERSION} pushed to beta tap successfully"

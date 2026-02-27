@@ -6,6 +6,7 @@
   "settings": {
     "default_sort": "created",
     "auto_capture_git": true,
-    "quick_list_limit": 50
+    "quick_list_limit": 50,
+    "soft_delete": false
   }
 }
