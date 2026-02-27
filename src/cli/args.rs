@@ -1,4 +1,4 @@
-use clap::{ArgAction, Parser, Subcommand};
+use clap::{value_parser, ArgAction, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "stackydo")]
@@ -51,6 +51,13 @@ pub enum Commands {
     /// Register stackydo-mcp with Claude Code via `claude mcp add`
     #[command(name = "mcp-setup")]
     McpSetup(McpSetupArgs),
+
+    /// Discover and list all stackydo workspaces
+    #[command(name = "list-workspaces", alias = "lw")]
+    ListWorkspaces(ListWorkspacesArgs),
+
+    /// Move or copy tasks between workspaces
+    Migrate(MigrateArgs),
 }
 
 #[derive(Parser)]
@@ -345,4 +352,54 @@ pub struct McpSetupArgs {
     /// Name to register the server under (default: stackydo)
     #[arg(long, default_value = "stackydo")]
     pub name: Option<String>,
+}
+
+#[derive(Parser)]
+pub struct ListWorkspacesArgs {
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Parser)]
+pub struct MigrateArgs {
+    /// Source workspace path (directory, stackydo.json, or store dir)
+    #[arg(long)]
+    pub source: Option<String>,
+
+    /// Destination workspace path
+    #[arg(long)]
+    pub dest: Option<String>,
+
+    /// Filter by stack name (repeatable)
+    #[arg(long, action = ArgAction::Append)]
+    pub stack: Vec<String>,
+
+    /// Select all tasks from matched stacks
+    #[arg(long)]
+    pub all: bool,
+
+    /// Specific task ID or prefix (repeatable)
+    #[arg(long, action = ArgAction::Append)]
+    pub task: Vec<String>,
+
+    /// Move tasks (delete from source after copying)
+    #[arg(long = "move", conflicts_with = "copy")]
+    pub r#move: bool,
+
+    /// Copy tasks (keep in both workspaces)
+    #[arg(long, conflicts_with = "move")]
+    pub copy: bool,
+
+    /// Preview only — don't make any changes
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Skip confirmation; overwrite conflicts
+    #[arg(long, short)]
+    pub force: bool,
+
+    /// Create git commits for rollback (auto-detected if omitted)
+    #[arg(long, value_parser = value_parser!(bool), num_args = 0..=1, default_missing_value = "true")]
+    pub git_commit: Option<bool>,
 }

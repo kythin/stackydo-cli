@@ -6,6 +6,8 @@ pub mod delete;
 pub mod import;
 pub mod init;
 pub mod list;
+pub mod list_workspaces;
+pub mod migrate;
 pub mod search;
 pub mod show;
 pub mod stacks;

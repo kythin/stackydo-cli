@@ -651,6 +651,111 @@ IMPORT_SEARCH=$($TODO_BIN search "Imported task 2" 2>&1)
 assert_contains "$IMPORT_SEARCH" "Imported task 2" "import: task 2 searchable"
 
 # ════════════════════════════════════════════════════════════════════════
+# SCENARIO 23: list-workspaces command
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 23: list-workspaces command"
+
+# list-workspaces discovers workspaces (at minimum, global default if it exists)
+LW_OUT=$($TODO_BIN list-workspaces 2>&1)
+# Just check it runs without error — actual workspaces depend on user's system
+if [[ $? -eq 0 ]]; then
+    pass "list-workspaces: runs without error"
+else
+    fail "list-workspaces: runs without error"
+fi
+
+# Alias 'lw' should also work
+LW_ALIAS=$($TODO_BIN lw 2>&1)
+if [[ $? -eq 0 ]]; then
+    pass "list-workspaces: alias 'lw' works"
+else
+    fail "list-workspaces: alias 'lw' works"
+fi
+
+# JSON output
+LW_JSON=$($TODO_BIN list-workspaces --json 2>&1)
+if echo "$LW_JSON" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+    pass "list-workspaces --json: valid JSON"
+else
+    # Could be "No stackydo workspaces found." which is OK too
+    if echo "$LW_JSON" | grep -q "No stackydo"; then
+        pass "list-workspaces --json: no workspaces found (OK)"
+    else
+        fail "list-workspaces --json: valid JSON"
+    fi
+fi
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 24: migrate command (non-interactive)
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 24: migrate command"
+
+# Create two isolated workspace directories for migration testing
+MIGRATE_SRC=$(mktemp -d)
+MIGRATE_DST=$(mktemp -d)
+
+# Seed source workspace with tasks
+STACKYDO_DIR="$MIGRATE_SRC" $TODO_BIN create --title "Migrate task 1" --stack "work" >/dev/null 2>&1
+STACKYDO_DIR="$MIGRATE_SRC" $TODO_BIN create --title "Migrate task 2" --stack "work" >/dev/null 2>&1
+STACKYDO_DIR="$MIGRATE_SRC" $TODO_BIN create --title "Migrate task 3" --stack "personal" >/dev/null 2>&1
+
+# Verify source has 3 tasks
+SRC_COUNT=$(STACKYDO_DIR="$MIGRATE_SRC" $TODO_BIN list 2>&1)
+assert_contains "$SRC_COUNT" "3 task" "migrate: source has 3 tasks"
+
+# Test: missing required args
+if $TODO_BIN migrate --source "$MIGRATE_SRC" --dest "$MIGRATE_DST" 2>/dev/null; then
+    fail "migrate: requires --move or --copy" "succeeded without operation flag"
+else
+    pass "migrate: requires --move or --copy"
+fi
+
+# Test: dry-run copy by stack
+DRY_OUT=$($TODO_BIN migrate --source "$MIGRATE_SRC" --dest "$MIGRATE_DST" --stack work --copy --dry-run 2>&1)
+assert_contains "$DRY_OUT" "Dry run" "migrate --dry-run: shows dry run header"
+assert_contains "$DRY_OUT" "Migrate task 1" "migrate --dry-run: lists task 1"
+assert_contains "$DRY_OUT" "Migrate task 2" "migrate --dry-run: lists task 2"
+
+# Verify destination is still empty after dry run
+DST_COUNT_EMPTY=$(STACKYDO_DIR="$MIGRATE_DST" $TODO_BIN list 2>&1)
+assert_contains "$DST_COUNT_EMPTY" "No tasks found" "migrate --dry-run: dest unchanged"
+
+# Test: actual copy by stack
+COPY_OUT=$($TODO_BIN migrate --source "$MIGRATE_SRC" --dest "$MIGRATE_DST" --stack work --copy 2>&1)
+assert_contains "$COPY_OUT" "Copied 2 task" "migrate --copy: copied 2 tasks"
+
+# Verify destination has 2 tasks
+DST_AFTER_COPY=$(STACKYDO_DIR="$MIGRATE_DST" $TODO_BIN list 2>&1)
+assert_contains "$DST_AFTER_COPY" "2 task" "migrate --copy: dest has 2 tasks"
+
+# Verify source still has all 3 (copy preserves source)
+SRC_AFTER_COPY=$(STACKYDO_DIR="$MIGRATE_SRC" $TODO_BIN list 2>&1)
+assert_contains "$SRC_AFTER_COPY" "3 task" "migrate --copy: source unchanged"
+
+# Test: move remaining task from different stack
+MOVE_OUT=$($TODO_BIN migrate --source "$MIGRATE_SRC" --dest "$MIGRATE_DST" --stack personal --move 2>&1)
+assert_contains "$MOVE_OUT" "Moved 1 task" "migrate --move: moved 1 task"
+
+# Verify source lost the moved task
+SRC_AFTER_MOVE=$(STACKYDO_DIR="$MIGRATE_SRC" $TODO_BIN list 2>&1)
+assert_not_contains "$SRC_AFTER_MOVE" "Migrate task 3" "migrate --move: task removed from source"
+
+# Verify destination gained it
+DST_AFTER_MOVE=$(STACKYDO_DIR="$MIGRATE_DST" $TODO_BIN list 2>&1)
+assert_contains "$DST_AFTER_MOVE" "3 task" "migrate --move: dest has 3 tasks"
+
+# Test: conflict detection (copy same tasks again without --force)
+CONFLICT_OUT=$($TODO_BIN migrate --source "$MIGRATE_SRC" --dest "$MIGRATE_DST" --stack work --copy 2>&1)
+assert_contains "$CONFLICT_OUT" "conflict" "migrate: detects ID conflicts"
+
+# Test: --force overwrites conflicts
+FORCE_OUT=$($TODO_BIN migrate --source "$MIGRATE_SRC" --dest "$MIGRATE_DST" --stack work --copy --force 2>&1)
+assert_contains "$FORCE_OUT" "Copied 2 task" "migrate --force: overwrites conflicts"
+
+# Cleanup
+rm -rf "$MIGRATE_SRC" "$MIGRATE_DST"
+
+# ════════════════════════════════════════════════════════════════════════
 # Summary
 # ════════════════════════════════════════════════════════════════════════
 

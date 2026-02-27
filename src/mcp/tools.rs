@@ -8,6 +8,7 @@ use crate::context::dir_context;
 use crate::model::task::{Priority, Task, TaskJson, TaskStatus};
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
+use crate::storage::workspace;
 use chrono::Utc;
 use std::collections::BTreeMap;
 
@@ -123,6 +124,37 @@ pub struct DeleteTaskParams {
 pub struct SearchTasksParams {
     /// Search query (matches against title and body, case-insensitive)
     pub query: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ListWorkspacesParams {
+    // No params needed — discovery is automatic
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct MigrateTasksParams {
+    /// Source workspace path (directory, stackydo.json, or store dir)
+    pub source: String,
+    /// Destination workspace path
+    pub dest: String,
+    /// Filter by stack name(s), comma-separated
+    #[schemars(default)]
+    pub stack: Option<String>,
+    /// Specific task ID or prefix (comma-separated for multiple)
+    #[schemars(default)]
+    pub task: Option<String>,
+    /// Select all tasks from matched stacks
+    #[schemars(default)]
+    pub all: Option<bool>,
+    /// Operation: "move" or "copy" (default: "copy")
+    #[schemars(default)]
+    pub operation: Option<String>,
+    /// Preview only — don't make changes
+    #[schemars(default)]
+    pub dry_run: Option<bool>,
+    /// Overwrite conflicting task IDs in destination
+    #[schemars(default)]
+    pub force: Option<bool>,
 }
 
 // ── Helper for error conversion ──
@@ -580,6 +612,183 @@ impl StackydoMcp {
             tags,
         };
         serde_json::to_string(&output).unwrap_or_else(err_to_string)
+    }
+
+    #[rmcp::tool(description = "Discover and list all stackydo workspaces on the system. Returns JSON array of workspace info including store path, task count, stacks, and project name.")]
+    fn list_workspaces(
+        &self,
+        #[allow(unused_variables)]
+        Parameters(params): Parameters<ListWorkspacesParams>,
+    ) -> String {
+        let workspaces = workspace::discover_workspaces();
+        serde_json::to_string(&workspaces).unwrap_or_else(err_to_string)
+    }
+
+    #[rmcp::tool(description = "Move or copy tasks between workspaces. Requires source and dest paths. Use dry_run to preview. Returns summary of migrated tasks.")]
+    fn migrate_tasks(
+        &self,
+        Parameters(params): Parameters<MigrateTasksParams>,
+    ) -> String {
+        let source_dir = match workspace::resolve_workspace_path(&params.source) {
+            Ok(d) => d,
+            Err(e) => return err_to_string(format!("Invalid source: {e}")),
+        };
+        let dest_dir = match workspace::resolve_workspace_path(&params.dest) {
+            Ok(d) => d,
+            Err(e) => return err_to_string(format!("Invalid dest: {e}")),
+        };
+
+        let source_store = TaskStore::with_root(source_dir.clone());
+        let all_tasks = match source_store.load_all() {
+            Ok(t) => t,
+            Err(e) => return err_to_string(e),
+        };
+
+        // Parse filters
+        let task_ids: Vec<String> = params
+            .task
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let stacks: Vec<String> = params
+            .stack
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let select_all = params.all.unwrap_or(false);
+
+        if task_ids.is_empty() && stacks.is_empty() && !select_all {
+            return err_to_string("Specify task, stack, or all=true to select tasks");
+        }
+
+        // Select tasks
+        let selected: Vec<&Task> = if select_all && stacks.is_empty() && task_ids.is_empty() {
+            all_tasks.iter().collect()
+        } else {
+            let mut sel = Vec::new();
+            let stack_set: std::collections::HashSet<&str> =
+                stacks.iter().map(|s| s.as_str()).collect();
+            for task in &all_tasks {
+                let by_id = task_ids
+                    .iter()
+                    .any(|prefix| task.frontmatter.id.starts_with(prefix));
+                let by_stack = task
+                    .frontmatter
+                    .stack
+                    .as_deref()
+                    .map(|s| stack_set.contains(s))
+                    .unwrap_or(false);
+                if by_id || by_stack {
+                    sel.push(task);
+                }
+            }
+            sel
+        };
+
+        if selected.is_empty() {
+            return "No tasks matched the given filters.".to_string();
+        }
+
+        let is_move = params.operation.as_deref() == Some("move");
+        let dry_run = params.dry_run.unwrap_or(false);
+        let force = params.force.unwrap_or(false);
+        let op_str = if is_move { "Move" } else { "Copy" };
+        let op_past = if is_move { "Moved" } else { "Copied" };
+
+        // Check for conflicts
+        let dest_store = TaskStore::with_root(dest_dir.clone());
+        let dest_ids: std::collections::HashSet<String> = dest_store
+            .load_all()
+            .unwrap_or_default()
+            .iter()
+            .map(|t| t.frontmatter.id.clone())
+            .collect();
+
+        let mut conflicts = 0usize;
+        let mut to_migrate = Vec::new();
+        for task in &selected {
+            if dest_ids.contains(&task.frontmatter.id) {
+                if force {
+                    to_migrate.push(*task);
+                } else {
+                    conflicts += 1;
+                }
+            } else {
+                to_migrate.push(*task);
+            }
+        }
+
+        if to_migrate.is_empty() {
+            return format!(
+                "No tasks to migrate. {} skipped due to ID conflicts (use force=true to overwrite).",
+                conflicts
+            );
+        }
+
+        if dry_run {
+            let task_lines: Vec<String> = to_migrate
+                .iter()
+                .map(|t| {
+                    let prefix = &t.frontmatter.id[..t.frontmatter.id.len().min(10)];
+                    format!("  {} {} [{}]", prefix, t.frontmatter.title, t.frontmatter.status)
+                })
+                .collect();
+            return format!(
+                "Dry run: would {op_str} {} task(s) from {} to {}\n{}\n{}",
+                to_migrate.len(),
+                source_dir.display(),
+                dest_dir.display(),
+                task_lines.join("\n"),
+                if conflicts > 0 {
+                    format!("  ({conflicts} skipped due to conflicts)")
+                } else {
+                    String::new()
+                }
+            );
+        }
+
+        // Execute migration
+        let dest_manifest =
+            ManifestStore::with_path(dest_dir.join("manifest.json"));
+        for task in &to_migrate {
+            if let Err(e) = dest_store.save(task) {
+                return err_to_string(format!("Failed to save task: {e}"));
+            }
+            if let Some(ref stack) = task.frontmatter.stack {
+                let _ = dest_manifest.register_stack(stack);
+            }
+            if !task.frontmatter.tags.is_empty() {
+                let _ = dest_manifest.register_tags(&task.frontmatter.tags);
+            }
+        }
+
+        if is_move {
+            let source_manifest =
+                ManifestStore::with_path(source_dir.join("manifest.json"));
+            for task in &to_migrate {
+                let _ = source_store.delete(&task.frontmatter.id);
+            }
+            if let Ok(remaining) = source_store.load_all() {
+                let _ = source_manifest.prune_stacks_and_tags(&remaining);
+            }
+        }
+
+        let mut result = format!(
+            "{op_past} {} task(s) from {} to {}.",
+            to_migrate.len(),
+            source_dir.display(),
+            dest_dir.display()
+        );
+        if conflicts > 0 {
+            result.push_str(&format!(" Skipped {conflicts} due to conflicts."));
+        }
+        result
     }
 
     #[rmcp::tool(description = "Get all stacks with per-stack task counts and status breakdowns.")]

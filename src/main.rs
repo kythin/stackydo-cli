@@ -4,16 +4,24 @@ use stackydo::commands;
 use stackydo::storage::paths::TodoPaths;
 
 fn main() {
-    // Resolve task store root from env / stackydo.json / default
-    TodoPaths::init();
-
-    // Ensure storage directory exists
-    if let Err(e) = TodoPaths::ensure_root() {
-        eprintln!("Error: cannot create {}: {e}", TodoPaths::root().display());
-        std::process::exit(1);
-    }
-
     let cli = Cli::parse();
+
+    // list-workspaces and migrate discover their own roots
+    let skip_init = matches!(
+        cli.command,
+        Some(Commands::ListWorkspaces(_)) | Some(Commands::Migrate(_))
+    );
+
+    if !skip_init {
+        // Resolve task store root from env / stackydo.json / default
+        TodoPaths::init();
+
+        // Ensure storage directory exists
+        if let Err(e) = TodoPaths::ensure_root() {
+            eprintln!("Error: cannot create {}: {e}", TodoPaths::root().display());
+            std::process::exit(1);
+        }
+    }
 
     let result = match cli.command {
         None => unreachable!("clap exits before this point"),
@@ -56,6 +64,12 @@ fn main() {
         }
         Some(Commands::McpSetup(ref args)) => {
             commands::mcp_setup::execute(args)
+        }
+        Some(Commands::ListWorkspaces(ref args)) => {
+            commands::list_workspaces::execute(args)
+        }
+        Some(Commands::Migrate(ref args)) => {
+            commands::migrate::execute(args)
         }
     };
 

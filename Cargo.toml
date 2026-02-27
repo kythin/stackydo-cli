@@ -1,6 +1,6 @@
 [package]
 name = "stackydo"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.70"
 description = "Context-aware CLI task manager — stacky do!"
@@ -35,6 +35,9 @@ ulid = "1.1"
 
 # Git
 git2 = { version = "0.18", features = ["vendored-libgit2", "vendored-openssl"] }
+
+# Interactive prompts
+dialoguer = "0.11"
 
 # Filesystem & patterns
 walkdir = "2.4"
