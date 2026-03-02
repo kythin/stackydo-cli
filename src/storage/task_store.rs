@@ -126,19 +126,26 @@ fn parse_task(content: &str) -> Result<Task> {
     Ok(Task { frontmatter, body })
 }
 
+/// Normalize line endings to Unix LF (`\n`).
+/// Converts `\r\n` (Windows CRLF) and standalone `\r` (old Mac) to `\n`.
+fn normalize_line_endings(s: &str) -> String {
+    s.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 /// Serialize a Task to markdown with YAML frontmatter.
 fn serialize_task(task: &Task) -> Result<String> {
     let yaml = serde_yaml::to_string(&task.frontmatter).map_err(TodoError::Yaml)?;
+    let body = normalize_line_endings(&task.body);
     let mut out = String::new();
     out.push_str(FRONTMATTER_DELIMITER);
     out.push('\n');
     out.push_str(&yaml);
     out.push_str(FRONTMATTER_DELIMITER);
     out.push('\n');
-    if !task.body.is_empty() {
+    if !body.is_empty() {
         out.push('\n');
-        out.push_str(&task.body);
-        if !task.body.ends_with('\n') {
+        out.push_str(&body);
+        if !body.ends_with('\n') {
             out.push('\n');
         }
     }

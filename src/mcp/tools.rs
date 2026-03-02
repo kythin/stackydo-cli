@@ -3,9 +3,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::commands::show::resolve_task_pub;
-use crate::commands::util::parse_due_date;
+use crate::commands::util::{
+    apply_filters, apply_pagination, apply_sort, effective_limit, parse_due_date, FilterParams,
+};
 use crate::context::dir_context;
-use crate::model::task::{Priority, Task, TaskJson, TaskStatus};
+use crate::model::task::{Priority, Task, TaskJson, TaskStatus, TaskSummaryJson};
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
 use crate::storage::workspace;
@@ -37,9 +39,12 @@ pub struct ListTasksParams {
     /// Sort by: created (default), due, modified, priority
     #[schemars(default)]
     pub sort: Option<String>,
-    /// Maximum number of tasks to return
+    /// Max results to return (default: 50, 0 = no limit)
     #[schemars(default)]
     pub limit: Option<usize>,
+    /// Skip the first N results (0-indexed, default: 0). E.g. offset=50 + limit=50 returns results 51-100
+    #[schemars(default)]
+    pub offset: Option<usize>,
     /// Only show overdue tasks (due date passed, not done/cancelled)
     #[schemars(default)]
     pub overdue: Option<bool>,
@@ -52,6 +57,9 @@ pub struct ListTasksParams {
     /// Group results by field (supported: "stack")
     #[schemars(default)]
     pub group_by: Option<String>,
+    /// Include full task body in output (default: false, returns frontmatter only)
+    #[schemars(default)]
+    pub full: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -124,6 +132,42 @@ pub struct DeleteTaskParams {
 pub struct SearchTasksParams {
     /// Search query (matches against title and body, case-insensitive)
     pub query: String,
+    /// Filter results by status: todo, in_progress, done, blocked, cancelled
+    #[schemars(default)]
+    pub status: Option<String>,
+    /// Filter results by tag name
+    #[schemars(default)]
+    pub tag: Option<String>,
+    /// Filter results by priority: critical, high, medium, low
+    #[schemars(default)]
+    pub priority: Option<String>,
+    /// Filter results by stack name
+    #[schemars(default)]
+    pub stack: Option<String>,
+    /// Sort by: created (default), due, modified, priority
+    #[schemars(default)]
+    pub sort: Option<String>,
+    /// Max results to return (default: 50, 0 = no limit)
+    #[schemars(default)]
+    pub limit: Option<usize>,
+    /// Skip the first N results (0-indexed, default: 0)
+    #[schemars(default)]
+    pub offset: Option<usize>,
+    /// Only show overdue results (due date passed, not done/cancelled)
+    #[schemars(default)]
+    pub overdue: Option<bool>,
+    /// Only show results due before this date (YYYY-MM-DD)
+    #[schemars(default)]
+    pub due_before: Option<String>,
+    /// Only show results due after this date (YYYY-MM-DD)
+    #[schemars(default)]
+    pub due_after: Option<String>,
+    /// Group results by field (supported: "stack")
+    #[schemars(default)]
+    pub group_by: Option<String>,
+    /// Include full task body in output (default: false, returns frontmatter only)
+    #[schemars(default)]
+    pub full: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -167,7 +211,7 @@ fn err_to_string(e: impl std::fmt::Display) -> String {
 
 #[tool_router]
 impl StackydoMcp {
-    #[rmcp::tool(description = "List tasks with optional filters and sorting. Returns JSON array of tasks, or grouped object when group_by is specified.")]
+    #[rmcp::tool(description = "List tasks with optional filters and sorting. Returns JSON array of tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Use offset for pagination.")]
     fn list_tasks(
         &self,
         Parameters(params): Parameters<ListTasksParams>,
@@ -183,109 +227,64 @@ impl StackydoMcp {
             tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
         }
 
-        // Filter by status
-        if let Some(ref status_str) = params.status {
-            match status_str.parse::<TaskStatus>() {
-                Ok(s) => tasks.retain(|t| t.frontmatter.status == s),
-                Err(e) => return err_to_string(e),
-            }
-        }
-
-        // Filter by tag
-        if let Some(ref tag) = params.tag {
-            let tag_lower = tag.to_lowercase();
-            tasks.retain(|t| {
-                t.frontmatter
-                    .tags
-                    .iter()
-                    .any(|tt| tt.to_lowercase() == tag_lower)
-            });
-        }
-
-        // Filter by priority
-        if let Some(ref pri_str) = params.priority {
-            match pri_str.parse::<Priority>() {
-                Ok(pri) => tasks.retain(|t| t.frontmatter.priority.as_ref() == Some(&pri)),
-                Err(e) => return err_to_string(e),
-            }
-        }
-
-        // Filter by stack
-        if let Some(ref stack) = params.stack {
-            let stack_lower = stack.to_lowercase();
-            tasks.retain(|t| {
-                t.frontmatter
-                    .stack
-                    .as_ref()
-                    .map(|s| s.to_lowercase() == stack_lower)
-                    .unwrap_or(false)
-            });
-        }
-
-        // Filter: overdue
-        if params.overdue.unwrap_or(false) {
-            let now = Utc::now();
-            tasks.retain(|t| {
-                if let Some(due) = t.frontmatter.due {
-                    due < now
-                        && t.frontmatter.status != TaskStatus::Done
-                        && t.frontmatter.status != TaskStatus::Cancelled
-                        && t.frontmatter.status != TaskStatus::Deleted
-                } else {
-                    false
-                }
-            });
-        }
-
-        // Filter: due_before
-        if let Some(ref date_str) = params.due_before {
-            match parse_due_date(date_str) {
-                Ok(cutoff) => tasks.retain(|t| t.frontmatter.due.map(|d| d < cutoff).unwrap_or(false)),
-                Err(e) => return err_to_string(e),
-            }
-        }
-
-        // Filter: due_after
-        if let Some(ref date_str) = params.due_after {
-            match parse_due_date(date_str) {
-                Ok(cutoff) => tasks.retain(|t| t.frontmatter.due.map(|d| d > cutoff).unwrap_or(false)),
-                Err(e) => return err_to_string(e),
-            }
+        // Apply filters
+        if let Err(e) = apply_filters(
+            &mut tasks,
+            &FilterParams {
+                status: params.status.as_deref(),
+                tag: params.tag.as_deref(),
+                priority: params.priority.as_deref(),
+                stack: params.stack.as_deref(),
+                overdue: params.overdue.unwrap_or(false),
+                due_before: params.due_before.as_deref(),
+                due_after: params.due_after.as_deref(),
+                due_this_week: false,
+            },
+        ) {
+            return err_to_string(e);
         }
 
         // Sort
-        let sort_field = params.sort.as_deref().unwrap_or("created");
-        match sort_field {
-            "due" => tasks.sort_by(|a, b| a.frontmatter.due.cmp(&b.frontmatter.due)),
-            "modified" => tasks.sort_by(|a, b| b.frontmatter.modified.cmp(&a.frontmatter.modified)),
-            "priority" => tasks.sort_by(|a, b| a.frontmatter.priority.cmp(&b.frontmatter.priority)),
-            _ => tasks.sort_by(|a, b| b.frontmatter.created.cmp(&a.frontmatter.created)),
+        if let Err(e) = apply_sort(&mut tasks, params.sort.as_deref().unwrap_or("created"), false) {
+            return err_to_string(e);
         }
 
-        // Limit
-        if let Some(limit) = params.limit {
-            tasks.truncate(limit);
-        }
+        // Pagination
+        let limit = effective_limit(params.limit);
+        let offset = params.offset.unwrap_or(0);
+        apply_pagination(&mut tasks, offset, limit);
+
+        let full = params.full.unwrap_or(false);
 
         // Group-by
         if let Some(ref group_field) = params.group_by {
             if group_field == "stack" {
-                let mut groups: BTreeMap<String, Vec<TaskJson>> = BTreeMap::new();
-                for task in &tasks {
-                    let key = task
-                        .frontmatter
-                        .stack
-                        .clone()
-                        .unwrap_or_else(|| "(no stack)".to_string());
-                    groups.entry(key).or_default().push(TaskJson::from(task));
+                if full {
+                    let mut groups: BTreeMap<String, Vec<TaskJson>> = BTreeMap::new();
+                    for task in &tasks {
+                        let key = task.frontmatter.stack.clone().unwrap_or_else(|| "(no stack)".to_string());
+                        groups.entry(key).or_default().push(TaskJson::from(task));
+                    }
+                    return serde_json::to_string(&groups).unwrap_or_else(err_to_string);
+                } else {
+                    let mut groups: BTreeMap<String, Vec<TaskSummaryJson>> = BTreeMap::new();
+                    for task in &tasks {
+                        let key = task.frontmatter.stack.clone().unwrap_or_else(|| "(no stack)".to_string());
+                        groups.entry(key).or_default().push(TaskSummaryJson::from(task));
+                    }
+                    return serde_json::to_string(&groups).unwrap_or_else(err_to_string);
                 }
-                return serde_json::to_string(&groups).unwrap_or_else(err_to_string);
             }
             return err_to_string(format!("Unknown group_by field: '{group_field}'. Supported: stack"));
         }
 
-        let json_tasks: Vec<TaskJson> = tasks.iter().map(TaskJson::from).collect();
-        serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
+        if full {
+            let json_tasks: Vec<TaskJson> = tasks.iter().map(TaskJson::from).collect();
+            serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
+        } else {
+            let json_tasks: Vec<TaskSummaryJson> = tasks.iter().map(TaskSummaryJson::from).collect();
+            serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
+        }
     }
 
     #[rmcp::tool(description = "Get a single task by ID (supports prefix matching). Returns full task JSON including body and context.")]
@@ -316,11 +315,18 @@ impl StackydoMcp {
         let context_path = std::env::current_dir().unwrap_or_else(|_| ".".into());
         let ctx = dir_context::capture(&context_path);
 
-        let mut task = Task::new(id.clone(), params.title, cwd);
+        // Validate title
+        let title = params.title.trim().to_string();
+        if title.is_empty() {
+            return err_to_string("Title cannot be empty");
+        }
+
+        let mut task = Task::new(id.clone(), title, cwd);
         task.frontmatter.context = ctx;
 
         if let Some(body) = params.body {
-            task.body = body;
+            // Convert literal \n escape sequences from MCP JSON to real newlines
+            task.body = body.replace("\\n", "\n");
         }
 
         if let Some(ref pri_str) = params.priority {
@@ -376,7 +382,11 @@ impl StackydoMcp {
         let mut changed = false;
 
         if let Some(ref title) = params.title {
-            task.frontmatter.title = title.clone();
+            let title = title.trim().to_string();
+            if title.is_empty() {
+                return err_to_string("Title cannot be empty");
+            }
+            task.frontmatter.title = title;
             changed = true;
         }
 
@@ -441,6 +451,8 @@ impl StackydoMcp {
         }
 
         if let Some(ref note_text) = params.note {
+            // Convert literal \n escape sequences from MCP JSON to real newlines
+            let note_text = note_text.replace("\\n", "\n");
             let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M");
             let entry = format!("\n[{timestamp}] {note_text}");
             if task.body.is_empty() {
@@ -540,19 +552,79 @@ impl StackydoMcp {
         }
     }
 
-    #[rmcp::tool(description = "Search tasks by matching query against title and body (case-insensitive). Returns JSON array of matching tasks.")]
+    #[rmcp::tool(description = "Search tasks by matching query against title and body (case-insensitive). Returns JSON array of matching tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Supports filtering, sorting, and pagination.")]
     fn search_tasks(
         &self,
         Parameters(params): Parameters<SearchTasksParams>,
     ) -> String {
         let store = TaskStore::new();
-        match store.search(&params.query) {
-            Ok(mut tasks) => {
-                tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
-                let json_tasks: Vec<TaskJson> = tasks.iter().map(TaskJson::from).collect();
-                serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
+        let mut tasks = match store.search(&params.query) {
+            Ok(t) => t,
+            Err(e) => return err_to_string(e),
+        };
+
+        // Exclude soft-deleted unless explicitly requested
+        if params.status.as_deref() != Some("deleted") {
+            tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
+        }
+
+        // Apply filters
+        if let Err(e) = apply_filters(
+            &mut tasks,
+            &FilterParams {
+                status: params.status.as_deref(),
+                tag: params.tag.as_deref(),
+                priority: params.priority.as_deref(),
+                stack: params.stack.as_deref(),
+                overdue: params.overdue.unwrap_or(false),
+                due_before: params.due_before.as_deref(),
+                due_after: params.due_after.as_deref(),
+                due_this_week: false,
+            },
+        ) {
+            return err_to_string(e);
+        }
+
+        // Sort
+        if let Err(e) = apply_sort(&mut tasks, params.sort.as_deref().unwrap_or("created"), false) {
+            return err_to_string(e);
+        }
+
+        // Pagination
+        let limit = effective_limit(params.limit);
+        let offset = params.offset.unwrap_or(0);
+        apply_pagination(&mut tasks, offset, limit);
+
+        let full = params.full.unwrap_or(false);
+
+        // Group-by
+        if let Some(ref group_field) = params.group_by {
+            if group_field == "stack" {
+                if full {
+                    let mut groups: BTreeMap<String, Vec<TaskJson>> = BTreeMap::new();
+                    for task in &tasks {
+                        let key = task.frontmatter.stack.clone().unwrap_or_else(|| "(no stack)".to_string());
+                        groups.entry(key).or_default().push(TaskJson::from(task));
+                    }
+                    return serde_json::to_string(&groups).unwrap_or_else(err_to_string);
+                } else {
+                    let mut groups: BTreeMap<String, Vec<TaskSummaryJson>> = BTreeMap::new();
+                    for task in &tasks {
+                        let key = task.frontmatter.stack.clone().unwrap_or_else(|| "(no stack)".to_string());
+                        groups.entry(key).or_default().push(TaskSummaryJson::from(task));
+                    }
+                    return serde_json::to_string(&groups).unwrap_or_else(err_to_string);
+                }
             }
-            Err(e) => err_to_string(e),
+            return err_to_string(format!("Unknown group_by field: '{group_field}'. Supported: stack"));
+        }
+
+        if full {
+            let json_tasks: Vec<TaskJson> = tasks.iter().map(TaskJson::from).collect();
+            serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
+        } else {
+            let json_tasks: Vec<TaskSummaryJson> = tasks.iter().map(TaskSummaryJson::from).collect();
+            serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
         }
     }
 

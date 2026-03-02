@@ -1,6 +1,6 @@
 use crate::error::{Result, TodoError};
-use crate::model::task::{Task, TaskFrontmatter, TaskStatus};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use crate::model::task::{Priority, Task, TaskFrontmatter, TaskStatus};
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use serde::Serialize;
 
 /// Case-insensitive glob match. Supports `*` as a wildcard (zero or more chars).
@@ -160,6 +160,184 @@ pub fn print_json_array<T: Serialize>(values: &[T]) -> Result<()> {
     let json = serde_json::to_string_pretty(values)?;
     println!("{json}");
     Ok(())
+}
+
+/// Parameters for filtering tasks (shared between CLI and MCP).
+pub struct FilterParams<'a> {
+    pub status: Option<&'a str>,
+    pub tag: Option<&'a str>,
+    pub priority: Option<&'a str>,
+    pub stack: Option<&'a str>,
+    pub overdue: bool,
+    pub due_before: Option<&'a str>,
+    pub due_after: Option<&'a str>,
+    pub due_this_week: bool,
+}
+
+/// Apply all filters in-place. Returns Err if a filter value is invalid.
+pub fn apply_filters(tasks: &mut Vec<Task>, f: &FilterParams) -> Result<()> {
+    // Status
+    if let Some(status_str) = f.status {
+        let s = status_str
+            .parse::<TaskStatus>()
+            .map_err(TodoError::Other)?;
+        tasks.retain(|t| t.frontmatter.status == s);
+    }
+
+    // Tag
+    if let Some(tag) = f.tag {
+        let tag_lower = tag.to_lowercase();
+        tasks.retain(|t| {
+            t.frontmatter
+                .tags
+                .iter()
+                .any(|tt| tt.to_lowercase() == tag_lower)
+        });
+    }
+
+    // Priority
+    if let Some(pri_str) = f.priority {
+        let pri = pri_str
+            .parse::<Priority>()
+            .map_err(TodoError::Other)?;
+        tasks.retain(|t| t.frontmatter.priority.as_ref() == Some(&pri));
+    }
+
+    // Stack
+    if let Some(stack) = f.stack {
+        let stack_lower = stack.to_lowercase();
+        tasks.retain(|t| {
+            t.frontmatter
+                .stack
+                .as_ref()
+                .map(|s| s.to_lowercase() == stack_lower)
+                .unwrap_or(false)
+        });
+    }
+
+    // Overdue
+    if f.overdue {
+        let now = Utc::now();
+        tasks.retain(|t| {
+            if let Some(due) = t.frontmatter.due {
+                due < now
+                    && t.frontmatter.status != TaskStatus::Done
+                    && t.frontmatter.status != TaskStatus::Cancelled
+                    && t.frontmatter.status != TaskStatus::Deleted
+            } else {
+                false
+            }
+        });
+    }
+
+    // Due before
+    if let Some(date_str) = f.due_before {
+        let cutoff = parse_due_date(date_str)?;
+        tasks.retain(|t| t.frontmatter.due.map(|d| d < cutoff).unwrap_or(false));
+    }
+
+    // Due after
+    if let Some(date_str) = f.due_after {
+        let cutoff = parse_due_date(date_str)?;
+        tasks.retain(|t| t.frontmatter.due.map(|d| d > cutoff).unwrap_or(false));
+    }
+
+    // Due this week
+    if f.due_this_week {
+        let today = Utc::now().date_naive();
+        let weekday = today.weekday().num_days_from_monday();
+        let monday = today - chrono::Duration::days(weekday as i64);
+        let sunday = monday + chrono::Duration::days(6);
+        tasks.retain(|t| {
+            if let Some(due) = t.frontmatter.due {
+                let due_date = due.date_naive();
+                due_date >= monday && due_date <= sunday
+            } else {
+                false
+            }
+        });
+    }
+
+    Ok(())
+}
+
+/// Sort tasks in-place by the given field. Optionally reverse.
+/// Returns an error if the sort field is not recognized.
+pub fn apply_sort(tasks: &mut Vec<Task>, sort: &str, reverse: bool) -> Result<()> {
+    match sort {
+        "due" => tasks.sort_by(|a, b| a.frontmatter.due.cmp(&b.frontmatter.due)),
+        "modified" => tasks.sort_by(|a, b| b.frontmatter.modified.cmp(&a.frontmatter.modified)),
+        "priority" => tasks.sort_by(|a, b| a.frontmatter.priority.cmp(&b.frontmatter.priority)),
+        "created" => tasks.sort_by(|a, b| b.frontmatter.created.cmp(&a.frontmatter.created)),
+        other => {
+            return Err(TodoError::Other(format!(
+                "Invalid sort: {other}. Use: created, due, modified, priority"
+            )))
+        }
+    }
+    if reverse {
+        tasks.reverse();
+    }
+    Ok(())
+}
+
+/// Pagination result info.
+pub struct PaginationInfo {
+    /// Total items before pagination.
+    pub total: usize,
+    /// 0-indexed start position in original list.
+    pub start: usize,
+    /// Number of items in the page.
+    pub page_len: usize,
+}
+
+/// Compute effective limit from raw limit value (None → 50, 0 → no limit).
+pub fn effective_limit(limit: Option<usize>) -> usize {
+    match limit {
+        Some(0) => usize::MAX,
+        Some(n) => n,
+        None => 50,
+    }
+}
+
+/// Apply offset and limit to a task list in-place. Returns pagination info.
+pub fn apply_pagination(tasks: &mut Vec<Task>, offset: usize, limit: usize) -> PaginationInfo {
+    let total = tasks.len();
+    let start = offset.min(total);
+    if start > 0 {
+        tasks.drain(..start);
+    }
+    let effective_limit = if limit == usize::MAX { tasks.len() } else { limit };
+    tasks.truncate(effective_limit);
+    PaginationInfo {
+        total,
+        start,
+        page_len: tasks.len(),
+    }
+}
+
+/// Print a human-readable pagination footer.
+pub fn print_pagination_footer(info: &PaginationInfo, label: &str) {
+    if info.page_len == info.total {
+        // All results shown
+        println!(
+            "\n({} {}{})",
+            info.total,
+            label,
+            if info.total == 1 { "" } else { "s" }
+        );
+    } else {
+        // Paginated
+        let end = info.start + info.page_len;
+        println!(
+            "\n(showing {}-{} of {} {}{})",
+            info.start + 1,
+            end,
+            info.total,
+            label,
+            if info.total == 1 { "" } else { "s" }
+        );
+    }
 }
 
 #[cfg(test)]

@@ -199,13 +199,21 @@ pub struct ListArgs {
     #[arg(long)]
     pub reverse: bool,
 
-    /// Limit number of results
+    /// Max results to return (default: 50, 0 = no limit)
     #[arg(long)]
     pub limit: Option<usize>,
+
+    /// Skip the first N results (0-indexed, default: 0). E.g. --offset 50 --limit 50 shows results 51-100
+    #[arg(long, default_value = "0")]
+    pub offset: usize,
 
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
+
+    /// Include full task body in JSON output (omitted by default)
+    #[arg(long)]
+    pub full: bool,
 
     /// Show only overdue tasks (due before now, not done/cancelled)
     #[arg(long)]
@@ -291,9 +299,65 @@ pub struct SearchArgs {
     /// Search query (matched against title and body)
     pub query: String,
 
+    /// Filter by status: todo, in_progress, done, blocked, cancelled
+    #[arg(long)]
+    pub status: Option<String>,
+
+    /// Filter by tag
+    #[arg(long)]
+    pub tag: Option<String>,
+
+    /// Filter by priority
+    #[arg(long)]
+    pub priority: Option<String>,
+
+    /// Filter by stack
+    #[arg(long)]
+    pub stack: Option<String>,
+
+    /// Sort by: created, due, priority, modified (default: created)
+    #[arg(long, default_value = "created")]
+    pub sort: String,
+
+    /// Reverse sort order
+    #[arg(long)]
+    pub reverse: bool,
+
+    /// Max results to return (default: 50, 0 = no limit)
+    #[arg(long)]
+    pub limit: Option<usize>,
+
+    /// Skip the first N results (0-indexed, default: 0). E.g. --offset 50 --limit 50 shows results 51-100
+    #[arg(long, default_value = "0")]
+    pub offset: usize,
+
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
+
+    /// Include full task body in JSON output (omitted by default)
+    #[arg(long)]
+    pub full: bool,
+
+    /// Show only overdue tasks (due before now, not done/cancelled)
+    #[arg(long)]
+    pub overdue: bool,
+
+    /// Filter tasks due before this date
+    #[arg(long)]
+    pub due_before: Option<String>,
+
+    /// Filter tasks due after this date
+    #[arg(long)]
+    pub due_after: Option<String>,
+
+    /// Filter tasks due this week (Monday–Sunday)
+    #[arg(long)]
+    pub due_this_week: bool,
+
+    /// Group output by field (e.g. "stack")
+    #[arg(long)]
+    pub group_by: Option<String>,
 }
 
 #[derive(Parser)]

@@ -204,6 +204,22 @@ impl From<Task> for TaskJson {
     }
 }
 
+/// JSON-friendly summary of a task (frontmatter only, no body).
+/// Used as the default serialization for list/search output.
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskSummaryJson {
+    #[serde(flatten)]
+    pub frontmatter: TaskFrontmatter,
+}
+
+impl From<&Task> for TaskSummaryJson {
+    fn from(task: &Task) -> Self {
+        Self {
+            frontmatter: task.frontmatter.clone(),
+        }
+    }
+}
+
 /// Input format for importing tasks.
 #[derive(Debug, Deserialize)]
 pub struct TaskImportInput {
