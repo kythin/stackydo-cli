@@ -15,11 +15,11 @@ jobs:
     steps:
       - name: Resolve version
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_BETA_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ github.event.inputs.version }}"
           if [ -z "$VERSION" ]; then
-            VERSION=$(gh api repos/kythin/stackydo-cli/releases/latest --jq '.tag_name')
+            VERSION=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name')
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Promoting version: $VERSION"
