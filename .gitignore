@@ -7,3 +7,6 @@ tests/.test-data/
 firebase-debug.log
 .stackydo-workspace/
 test-results-*.md
+
+# keep the local test cruft out of the commit history
+.stackydo
