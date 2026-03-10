@@ -263,7 +263,7 @@ pub fn apply_filters(tasks: &mut Vec<Task>, f: &FilterParams) -> Result<()> {
 
 /// Sort tasks in-place by the given field. Optionally reverse.
 /// Returns an error if the sort field is not recognized.
-pub fn apply_sort(tasks: &mut Vec<Task>, sort: &str, reverse: bool) -> Result<()> {
+pub fn apply_sort(tasks: &mut [Task], sort: &str, reverse: bool) -> Result<()> {
     match sort {
         "due" => tasks.sort_by(|a, b| a.frontmatter.due.cmp(&b.frontmatter.due)),
         "modified" => tasks.sort_by(|a, b| b.frontmatter.modified.cmp(&a.frontmatter.modified)),
