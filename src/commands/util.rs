@@ -321,21 +321,19 @@ pub fn print_pagination_footer(info: &PaginationInfo, label: &str) {
     if info.page_len == info.total {
         // All results shown
         println!(
-            "\n({} {}{})",
+            "\n({} {}{} total)",
             info.total,
             label,
             if info.total == 1 { "" } else { "s" }
         );
     } else {
         // Paginated
-        let end = info.start + info.page_len;
         println!(
-            "\n(showing {}-{} of {} {}{})",
-            info.start + 1,
-            end,
-            info.total,
+            "\n(showing {} {}{} of {} total)",
+            info.page_len,
             label,
-            if info.total == 1 { "" } else { "s" }
+            if info.page_len == 1 { "" } else { "s" },
+            info.total,
         );
     }
 }
