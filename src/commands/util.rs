@@ -263,7 +263,7 @@ pub fn apply_filters(tasks: &mut Vec<Task>, f: &FilterParams) -> Result<()> {
 
 /// Sort tasks in-place by the given field. Optionally reverse.
 /// Returns an error if the sort field is not recognized.
-pub fn apply_sort(tasks: &mut Vec<Task>, sort: &str, reverse: bool) -> Result<()> {
+pub fn apply_sort(tasks: &mut [Task], sort: &str, reverse: bool) -> Result<()> {
     match sort {
         "due" => tasks.sort_by(|a, b| a.frontmatter.due.cmp(&b.frontmatter.due)),
         "modified" => tasks.sort_by(|a, b| b.frontmatter.modified.cmp(&a.frontmatter.modified)),
@@ -321,21 +321,19 @@ pub fn print_pagination_footer(info: &PaginationInfo, label: &str) {
     if info.page_len == info.total {
         // All results shown
         println!(
-            "\n({} {}{})",
+            "\n({} {}{} total)",
             info.total,
             label,
             if info.total == 1 { "" } else { "s" }
         );
     } else {
         // Paginated
-        let end = info.start + info.page_len;
         println!(
-            "\n(showing {}-{} of {} {}{})",
-            info.start + 1,
-            end,
-            info.total,
+            "\n(showing {} {}{} of {} total)",
+            info.page_len,
             label,
-            if info.total == 1 { "" } else { "s" }
+            if info.page_len == 1 { "" } else { "s" },
+            info.total,
         );
     }
 }
