@@ -1,7 +1,6 @@
 use crate::cli::args::StacksArgs;
 use crate::commands::util::{active_stack_filter, glob_matches, print_json};
 use crate::error::Result;
-use crate::model::task::TaskStatus;
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
 use serde::Serialize;
@@ -16,11 +15,8 @@ struct StackInfo {
 pub fn execute(args: &StacksArgs) -> Result<()> {
     let store = TaskStore::new();
     let manifest_store = ManifestStore::new();
-    let mut tasks = store.load_all()?;
+    let tasks = store.load_all()?;
     let manifest = manifest_store.load()?;
-
-    // Exclude soft-deleted tasks
-    tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
 
     let stack_filter = active_stack_filter();
 
@@ -53,7 +49,7 @@ pub fn execute(args: &StacksArgs) -> Result<()> {
         if let Some(ref stack) = task.frontmatter.stack {
             if let Some(info) = stack_infos.get_mut(stack) {
                 info.total += 1;
-                let status_str = task.frontmatter.status.to_string();
+                let status_str = task.frontmatter.status.clone();
                 *info.by_status.entry(status_str).or_default() += 1;
             }
         }

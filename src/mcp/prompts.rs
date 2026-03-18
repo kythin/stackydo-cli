@@ -6,7 +6,8 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::model::task::{TaskJson, TaskStatus};
+use crate::commands::util::active_workflow;
+use crate::model::task::TaskJson;
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
 use chrono::Utc;
@@ -40,6 +41,7 @@ fn load_stats_summary() -> String {
         Ok(t) => t,
         Err(e) => return format!("Error loading tasks: {e}"),
     };
+    let workflow = active_workflow();
     let now = Utc::now();
 
     let total = tasks.len();
@@ -47,14 +49,11 @@ fn load_stats_summary() -> String {
     let mut overdue = 0usize;
 
     for task in &tasks {
-        let status_str = task.frontmatter.status.to_string();
-        *by_status.entry(status_str).or_default() += 1;
+        let status_str = task.frontmatter.status.clone();
+        *by_status.entry(status_str.clone()).or_default() += 1;
 
         if let Some(due) = task.frontmatter.due {
-            if due < now
-                && task.frontmatter.status != TaskStatus::Done
-                && task.frontmatter.status != TaskStatus::Cancelled
-            {
+            if due < now && !workflow.is_terminal(&status_str) {
                 overdue += 1;
             }
         }
@@ -77,13 +76,11 @@ fn load_open_tasks_json() -> String {
         Ok(t) => t,
         Err(e) => return format!("Error: {e}"),
     };
+    let workflow = active_workflow();
 
     let open: Vec<TaskJson> = tasks
         .iter()
-        .filter(|t| {
-            t.frontmatter.status != TaskStatus::Done
-                && t.frontmatter.status != TaskStatus::Cancelled
-        })
+        .filter(|t| !workflow.is_terminal(&t.frontmatter.status))
         .map(TaskJson::from)
         .collect();
 

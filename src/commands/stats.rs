@@ -1,7 +1,6 @@
 use crate::cli::args::StatsArgs;
-use crate::commands::util::{active_stack_filter, print_json, stack_filter_matches};
+use crate::commands::util::{active_stack_filter, active_workflow, print_json, stack_filter_matches};
 use crate::error::Result;
-use crate::model::task::TaskStatus;
 use crate::storage::task_store::TaskStore;
 use chrono::Utc;
 use serde::Serialize;
@@ -18,6 +17,7 @@ struct StatsOutput {
     total: usize,
     overdue: usize,
     by_status: BTreeMap<String, usize>,
+    by_stage: BTreeMap<String, usize>,
     by_stack: BTreeMap<String, StackStats>,
     tags: BTreeMap<String, usize>,
 }
@@ -25,33 +25,32 @@ struct StatsOutput {
 pub fn execute(args: &StatsArgs) -> Result<()> {
     let store = TaskStore::new();
     let mut tasks = store.load_all()?;
+    let workflow = active_workflow();
 
     // Apply stack_filter from stackydo.json
     if let Some(ref pattern) = active_stack_filter() {
         tasks.retain(|t| stack_filter_matches(pattern, t.frontmatter.stack.as_deref()));
     }
 
-    // Exclude soft-deleted tasks from stats
-    tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
-
     let now = Utc::now();
 
     let total = tasks.len();
     let mut by_status: BTreeMap<String, usize> = BTreeMap::new();
+    let mut by_stage: BTreeMap<String, usize> = BTreeMap::new();
     let mut by_stack: BTreeMap<String, StackStats> = BTreeMap::new();
     let mut tags: BTreeMap<String, usize> = BTreeMap::new();
     let mut overdue = 0usize;
 
     for task in &tasks {
-        let status_str = task.frontmatter.status.to_string();
+        let status_str = task.frontmatter.status.clone();
         *by_status.entry(status_str.clone()).or_default() += 1;
+
+        let stage = workflow.stage_for(&status_str);
+        *by_stage.entry(stage.to_string()).or_default() += 1;
 
         // Overdue check
         if let Some(due) = task.frontmatter.due {
-            if due < now
-                && task.frontmatter.status != TaskStatus::Done
-                && task.frontmatter.status != TaskStatus::Cancelled
-            {
+            if due < now && !workflow.is_terminal(&status_str) {
                 overdue += 1;
             }
         }
@@ -85,6 +84,7 @@ pub fn execute(args: &StatsArgs) -> Result<()> {
             total,
             overdue,
             by_status,
+            by_stage,
             by_stack,
             tags,
         };
@@ -95,6 +95,11 @@ pub fn execute(args: &StatsArgs) -> Result<()> {
     println!("Total tasks: {total}");
     if overdue > 0 {
         println!("Overdue: {overdue}");
+    }
+
+    println!("\nBy stage:");
+    for (stage, count) in &by_stage {
+        println!("  {stage}: {count}");
     }
 
     println!("\nBy status:");

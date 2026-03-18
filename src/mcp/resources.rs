@@ -13,12 +13,21 @@ Stackydo is a personal workload manager for one individual across all projects. 
 - Stored as `<ULID>.md` with YAML frontmatter + freeform markdown body
 - Fields: title, status, priority, tags, stack, due date, context, dependencies
 
-### Statuses
-- **todo** — not started
-- **in_progress** — actively being worked on
-- **done** — completed
-- **blocked** — waiting on something
-- **cancelled** — abandoned
+### Stages & Statuses
+
+Stackydo uses a two-tier model: **stages** (system-level, fixed) group **statuses** (user-facing, extensible).
+
+| Stage | Default Statuses | Description |
+|-------|-----------------|-------------|
+| **backlog** | `todo`, `on_hold` | Not actively being worked on |
+| **active** | `in_progress`, `blocked`, `in_review` | Currently in flight |
+| **archive** | `done`, `cancelled` | Terminal — hidden from list/search by default |
+
+- Use `--stage backlog|active|archive` to filter by stage
+- Use `--status <name>` to filter by specific status
+- Archive-stage tasks are hidden by default; use `--status done` or `--stage archive` to see them
+- Aliases: `doing` → `in_progress`, `canceled` → `cancelled`
+- Custom statuses can be configured per-workspace via `workflow` in `manifest.json`
 
 ### Priorities
 - **critical** — drop everything

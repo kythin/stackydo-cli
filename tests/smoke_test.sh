@@ -157,9 +157,9 @@ echo "  Seeded 8 tasks (2 completed, 6 todo)"
 # ════════════════════════════════════════════════════════════════════════
 section "Scenario 3: List with filters"
 
-# All tasks
+# All non-archive tasks (done/cancelled hidden by default)
 ALL=$($TODO_BIN list 2>&1)
-assert_contains "$ALL" "8 task" "list: shows all 8 tasks"
+assert_contains "$ALL" "6 task" "list: shows 6 non-archive tasks (done hidden by default)"
 
 # Filter by status=todo (should be 6)
 TODO_ONLY=$($TODO_BIN list --status todo 2>&1)
@@ -201,7 +201,7 @@ assert_contains "$SORTED_DUE" "Quarterly report" "sort by due: tasks with due da
 
 # Limit
 LIMITED=$($TODO_BIN list --limit 3 2>&1)
-assert_contains "$LIMITED" "3 task" "list --limit 3: exactly 3 results"
+assert_contains "$LIMITED" "showing 3" "list --limit 3: paginates to 3 results"
 
 # Reverse
 # Verify reverse sort changes order
@@ -345,9 +345,13 @@ STACK_OPS=$($TODO_BIN list --stack ops 2>&1)
 assert_contains "$STACK_OPS" "Server on fire" "list --stack ops: correct task"
 assert_contains "$STACK_OPS" "1 task" "list --stack ops: exactly 1 task"
 
-# Filter by stack=personal (includes completed tasks)
+# Filter by stack=personal (done hidden by default)
 STACK_PERSONAL=$($TODO_BIN list --stack personal 2>&1)
-assert_contains "$STACK_PERSONAL" "2 task" "list --stack personal: 2 tasks (including done)"
+assert_contains "$STACK_PERSONAL" "1 task" "list --stack personal: 1 task (done hidden by default)"
+
+# Filter by stack=personal with --status done shows completed tasks
+STACK_PERSONAL_DONE=$($TODO_BIN list --stack personal --status done 2>&1)
+assert_contains "$STACK_PERSONAL_DONE" "1 task" "list --stack personal --status done: 1 completed task"
 
 # Combo: stack + status
 STACK_WORK_TODO=$($TODO_BIN list --stack work --status todo 2>&1)
@@ -580,7 +584,8 @@ section "Scenario 18: Group-by stack"
 GROUP_OUT=$($TODO_BIN list --group-by stack 2>&1)
 assert_contains "$GROUP_OUT" "[work]" "group-by stack: work header"
 assert_contains "$GROUP_OUT" "[ops]" "group-by stack: ops header"
-assert_contains "$GROUP_OUT" "total" "group-by stack: total footer"
+# Pagination footer: "(N tasks)" or "(showing X-Y of N tasks)"
+assert_contains "$GROUP_OUT" "tasks)" "group-by stack: pagination footer"
 
 GROUP_JSON=$($TODO_BIN list --group-by stack --json 2>&1)
 assert_json_valid "$GROUP_JSON" "group-by stack --json: valid JSON"
@@ -754,6 +759,77 @@ assert_contains "$FORCE_OUT" "Copied 2 task" "migrate --force: overwrites confli
 
 # Cleanup
 rm -rf "$MIGRATE_SRC" "$MIGRATE_DST"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 25: Stage filtering and new statuses
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 25: Stage filtering and new statuses"
+
+# Update a task to on_hold status
+$TODO_BIN update "$ID1" --status on_hold >/dev/null 2>&1
+OUT_HOLD=$($TODO_BIN show "$ID1" 2>&1)
+assert_contains "$OUT_HOLD" "on_hold" "update: status changed to on_hold"
+
+# Update a task to in_review status
+$TODO_BIN update "$ID2" --status in_review >/dev/null 2>&1
+OUT_REVIEW=$($TODO_BIN show "$ID2" 2>&1)
+assert_contains "$OUT_REVIEW" "in_review" "update: status changed to in_review"
+
+# Filter by --stage active (should include in_review, exclude backlog/archive)
+STAGE_ACTIVE=$($TODO_BIN list --stage active 2>&1)
+assert_contains "$STAGE_ACTIVE" "in_review" "list --stage active: includes in_review task"
+assert_not_contains "$STAGE_ACTIVE" "on_hold" "list --stage active: excludes on_hold (backlog)"
+assert_not_contains "$STAGE_ACTIVE" "Update README" "list --stage active: excludes done (archive)"
+
+# Filter by --stage backlog (should include on_hold, exclude active/archive)
+STAGE_BACKLOG=$($TODO_BIN list --stage backlog 2>&1)
+assert_contains "$STAGE_BACKLOG" "on_hold" "list --stage backlog: includes on_hold task"
+assert_not_contains "$STAGE_BACKLOG" "in_review" "list --stage backlog: excludes in_review (active)"
+assert_not_contains "$STAGE_BACKLOG" "Update README" "list --stage backlog: excludes done (archive)"
+
+# Filter by --stage archive (should include done, exclude backlog/active)
+STAGE_ARCHIVE=$($TODO_BIN list --stage archive 2>&1)
+assert_contains "$STAGE_ARCHIVE" "Update README" "list --stage archive: includes done task"
+assert_not_contains "$STAGE_ARCHIVE" "on_hold" "list --stage archive: excludes on_hold (backlog)"
+assert_not_contains "$STAGE_ARCHIVE" "in_review" "list --stage archive: excludes in_review (active)"
+
+# Search hides archive tasks by default (ID3 "Fix the login page" was completed earlier)
+SEARCH_HIDDEN=$($TODO_BIN search "login page" 2>&1)
+assert_contains "$SEARCH_HIDDEN" "No tasks matching" "search: hides completed (archive) tasks by default"
+
+# Search with --status done finds archive tasks
+SEARCH_DONE=$($TODO_BIN search "login page" --status done 2>&1)
+assert_contains "$SEARCH_DONE" "Fix the login page" "search --status done: finds completed task"
+
+# --status deleted is rejected
+if $TODO_BIN update "$ID1" --status deleted 2>/dev/null; then
+    fail "update --status deleted: rejected" "succeeded when it should have failed"
+else
+    pass "update --status deleted: rejected (delete is a file operation)"
+fi
+
+# Verify the task wasn't changed to deleted
+OUT_STILL_HOLD=$($TODO_BIN show "$ID1" 2>&1)
+assert_contains "$OUT_STILL_HOLD" "on_hold" "update --status deleted: task unchanged"
+
+# Alias: "doing" resolves to in_progress
+$TODO_BIN update "$ID_CRIT" --status doing >/dev/null 2>&1
+OUT_DOING=$($TODO_BIN show "$ID_CRIT" 2>&1)
+assert_contains "$OUT_DOING" "in_progress" "update: 'doing' alias resolves to in_progress"
+
+# Bulk complete skips terminal tasks (create a cancelled task, verify bulk complete doesn't touch it)
+ID_CANCEL=$($TODO_BIN create --title "Cancelled task for skip test" --stack "skiptest" 2>&1)
+$TODO_BIN update "$ID_CANCEL" --status cancelled >/dev/null 2>&1
+ID_SKIP_TODO=$($TODO_BIN create --title "Todo task for skip test" --stack "skiptest" 2>&1)
+$TODO_BIN complete --stack "skiptest" --all >/dev/null 2>&1
+OUT_CANCEL_AFTER=$($TODO_BIN show "$ID_CANCEL" 2>&1)
+assert_contains "$OUT_CANCEL_AFTER" "cancelled" "bulk complete: skips cancelled (terminal) task"
+OUT_TODO_AFTER=$($TODO_BIN show "$ID_SKIP_TODO" 2>&1)
+assert_contains "$OUT_TODO_AFTER" "done" "bulk complete: completes non-terminal task"
+
+# Stats shows by_stage in JSON output
+STATS_JSON2=$($TODO_BIN stats --json 2>&1)
+assert_contains "$STATS_JSON2" '"by_stage"' "stats --json: includes by_stage breakdown"
 
 # ════════════════════════════════════════════════════════════════════════
 # Summary

@@ -1,7 +1,7 @@
 use crate::cli::args::ImportArgs;
-use crate::commands::util::parse_due_date;
+use crate::commands::util::{active_workflow, parse_due_date};
 use crate::error::{Result, TodoError};
-use crate::model::task::{Priority, Task, TaskImportInput, TaskStatus};
+use crate::model::task::{Priority, Task, TaskImportInput};
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
 use std::io::Read;
@@ -74,8 +74,9 @@ pub fn execute(args: &ImportArgs) -> Result<()> {
 
         // Status
         if let Some(ref status_str) = item.status {
-            task.frontmatter.status = status_str
-                .parse::<TaskStatus>()
+            let workflow = active_workflow();
+            task.frontmatter.status = workflow
+                .validate_status(status_str)
                 .map_err(TodoError::Other)?;
         }
 

@@ -1,11 +1,11 @@
 use crate::cli::args::ListArgs;
 use crate::commands::util::{
-    active_stack_filter, apply_filters, apply_pagination, apply_sort, effective_limit,
-    format_task_row, print_json, print_json_array, print_pagination_footer,
+    active_stack_filter, active_workflow, apply_filters, apply_pagination, apply_sort,
+    effective_limit, format_task_row, print_json, print_json_array, print_pagination_footer,
     stack_filter_matches, FilterParams,
 };
 use crate::error::{Result, TodoError};
-use crate::model::task::{TaskJson, TaskStatus, TaskSummaryJson};
+use crate::model::task::{TaskJson, TaskSummaryJson};
 use crate::storage::task_store::TaskStore;
 use std::collections::BTreeMap;
 
@@ -18,9 +18,10 @@ pub fn execute(args: &ListArgs) -> Result<()> {
         tasks.retain(|t| stack_filter_matches(pattern, t.frontmatter.stack.as_deref()));
     }
 
-    // Hide soft-deleted tasks unless explicitly requested
-    if args.status.as_deref() != Some("deleted") {
-        tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
+    // Hide archive-stage tasks by default unless explicitly filtering by status or stage
+    if args.status.is_none() && args.stage.is_none() {
+        let workflow = active_workflow();
+        tasks.retain(|t| !workflow.is_terminal(&t.frontmatter.status));
     }
 
     // Apply filters
@@ -28,6 +29,7 @@ pub fn execute(args: &ListArgs) -> Result<()> {
         &mut tasks,
         &FilterParams {
             status: args.status.as_deref(),
+            stage: args.stage.as_deref(),
             tag: args.tag.as_deref(),
             priority: args.priority.as_deref(),
             stack: args.stack.as_deref(),

@@ -4,10 +4,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::commands::show::resolve_task_pub;
 use crate::commands::util::{
-    apply_filters, apply_pagination, apply_sort, effective_limit, parse_due_date, FilterParams,
+    active_workflow, apply_filters, apply_pagination, apply_sort, effective_limit, parse_due_date,
+    FilterParams,
 };
 use crate::context::dir_context;
-use crate::model::task::{Priority, Task, TaskJson, TaskStatus, TaskSummaryJson};
+use crate::model::task::{Priority, Task, TaskJson, TaskSummaryJson};
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
 use crate::storage::workspace;
@@ -24,9 +25,12 @@ pub fn create_tool_router() -> rmcp::handler::server::router::tool::ToolRouter<S
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ListTasksParams {
-    /// Filter by status: todo, in_progress, done, blocked, cancelled
+    /// Filter by status: todo, in_progress, done, blocked, cancelled, on_hold, in_review
     #[schemars(default)]
     pub status: Option<String>,
+    /// Filter by stage: backlog, active, archive
+    #[schemars(default)]
+    pub stage: Option<String>,
     /// Filter by tag name
     #[schemars(default)]
     pub tag: Option<String>,
@@ -45,7 +49,7 @@ pub struct ListTasksParams {
     /// Skip the first N results (0-indexed, default: 0). E.g. offset=50 + limit=50 returns results 51-100
     #[schemars(default)]
     pub offset: Option<usize>,
-    /// Only show overdue tasks (due date passed, not done/cancelled)
+    /// Only show overdue tasks (due date passed, not in archive stage)
     #[schemars(default)]
     pub overdue: Option<bool>,
     /// Only show tasks due before this date (YYYY-MM-DD)
@@ -96,7 +100,7 @@ pub struct UpdateTaskParams {
     /// New title
     #[schemars(default)]
     pub title: Option<String>,
-    /// New status: todo, in_progress, done, blocked, cancelled
+    /// New status: todo, in_progress, done, blocked, cancelled, on_hold, in_review
     #[schemars(default)]
     pub status: Option<String>,
     /// New priority: critical, high, medium, low (or "none" to clear)
@@ -132,9 +136,12 @@ pub struct DeleteTaskParams {
 pub struct SearchTasksParams {
     /// Search query (matches against title and body, case-insensitive)
     pub query: String,
-    /// Filter results by status: todo, in_progress, done, blocked, cancelled
+    /// Filter results by status: todo, in_progress, done, blocked, cancelled, on_hold, in_review
     #[schemars(default)]
     pub status: Option<String>,
+    /// Filter results by stage: backlog, active, archive
+    #[schemars(default)]
+    pub stage: Option<String>,
     /// Filter results by tag name
     #[schemars(default)]
     pub tag: Option<String>,
@@ -153,7 +160,7 @@ pub struct SearchTasksParams {
     /// Skip the first N results (0-indexed, default: 0)
     #[schemars(default)]
     pub offset: Option<usize>,
-    /// Only show overdue results (due date passed, not done/cancelled)
+    /// Only show overdue results (due date passed, not in archive stage)
     #[schemars(default)]
     pub overdue: Option<bool>,
     /// Only show results due before this date (YYYY-MM-DD)
@@ -211,7 +218,7 @@ fn err_to_string(e: impl std::fmt::Display) -> String {
 
 #[tool_router]
 impl StackydoMcp {
-    #[rmcp::tool(description = "List tasks with optional filters and sorting. Returns JSON array of tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Use offset for pagination.")]
+    #[rmcp::tool(description = "List tasks with optional filters and sorting. Archive-stage tasks (done, cancelled) are hidden by default; pass status or stage to include them. Returns JSON array of tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Use offset for pagination.")]
     fn list_tasks(
         &self,
         Parameters(params): Parameters<ListTasksParams>,
@@ -222,9 +229,10 @@ impl StackydoMcp {
             Err(e) => return err_to_string(e),
         };
 
-        // Hide soft-deleted tasks unless explicitly requested
-        if params.status.as_deref() != Some("deleted") {
-            tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
+        // Hide archive-stage tasks by default unless filtering by status or stage
+        if params.status.is_none() && params.stage.is_none() {
+            let workflow = active_workflow();
+            tasks.retain(|t| !workflow.is_terminal(&t.frontmatter.status));
         }
 
         // Apply filters
@@ -232,6 +240,7 @@ impl StackydoMcp {
             &mut tasks,
             &FilterParams {
                 status: params.status.as_deref(),
+                stage: params.stage.as_deref(),
                 tag: params.tag.as_deref(),
                 priority: params.priority.as_deref(),
                 stack: params.stack.as_deref(),
@@ -391,9 +400,10 @@ impl StackydoMcp {
         }
 
         if let Some(ref status_str) = params.status {
-            match status_str.parse::<TaskStatus>() {
-                Ok(s) => {
-                    task.frontmatter.status = s;
+            let workflow = active_workflow();
+            match workflow.validate_status(status_str) {
+                Ok(canonical) => {
+                    task.frontmatter.status = canonical;
                     changed = true;
                 }
                 Err(e) => return err_to_string(e),
@@ -488,7 +498,7 @@ impl StackydoMcp {
             Err(e) => return err_to_string(e),
         };
 
-        task.frontmatter.status = TaskStatus::Done;
+        task.frontmatter.status = "done".to_string();
         task.frontmatter.modified = Utc::now();
 
         match store.save(&task) {
@@ -501,19 +511,15 @@ impl StackydoMcp {
         }
     }
 
-    #[rmcp::tool(description = "Delete a task. With soft_delete enabled in settings, marks as deleted instead of removing the file.")]
+    #[rmcp::tool(description = "Delete a task permanently (removes the file).")]
     fn delete_task(
         &self,
         Parameters(params): Parameters<DeleteTaskParams>,
     ) -> String {
         let store = TaskStore::new();
         let manifest_store = ManifestStore::new();
-        let soft_delete = manifest_store
-            .load()
-            .map(|m| m.settings.soft_delete)
-            .unwrap_or(false);
 
-        let mut task = match resolve_task_pub(&store, &params.id) {
+        let task = match resolve_task_pub(&store, &params.id) {
             Ok(t) => t,
             Err(e) => return err_to_string(e),
         };
@@ -521,38 +527,27 @@ impl StackydoMcp {
         let task_id = task.frontmatter.id.clone();
         let title = task.frontmatter.title.clone();
 
-        if soft_delete {
-            task.frontmatter.status = TaskStatus::Deleted;
-            task.frontmatter.modified = Utc::now();
-            match store.save(&task) {
-                Ok(()) => format!("Soft-deleted: {} — {}", &task_id[..10], title),
-                Err(e) => err_to_string(e),
+        // Clear parent's subtask reference
+        if let Some(ref parent_id) = task.frontmatter.parent_id {
+            if let Ok(mut parent) = store.load(parent_id) {
+                parent.frontmatter.subtask_ids.retain(|s| s != &task_id);
+                parent.frontmatter.modified = Utc::now();
+                let _ = store.save(&parent);
             }
-        } else {
-            // Clear parent's subtask reference
-            if let Some(ref parent_id) = task.frontmatter.parent_id {
-                if let Ok(mut parent) = store.load(parent_id) {
-                    parent.frontmatter.subtask_ids.retain(|s| s != &task_id);
-                    parent.frontmatter.modified = Utc::now();
-                    let _ = store.save(&parent);
-                }
-            }
+        }
 
-            match store.delete(&task_id) {
-                Ok(()) => {
-                    // Prune stacks/tags; load_all includes soft-deleted tasks so their
-                    // stacks/tags remain alive even after a hard delete of sibling tasks.
-                    if let Ok(remaining) = store.load_all() {
-                        let _ = manifest_store.prune_stacks_and_tags(&remaining);
-                    }
-                    format!("Deleted: {} — {}", &task_id[..10], title)
+        match store.delete(&task_id) {
+            Ok(()) => {
+                if let Ok(remaining) = store.load_all() {
+                    let _ = manifest_store.prune_stacks_and_tags(&remaining);
                 }
-                Err(e) => err_to_string(e),
+                format!("Deleted: {} — {}", &task_id[..10], title)
             }
+            Err(e) => err_to_string(e),
         }
     }
 
-    #[rmcp::tool(description = "Search tasks by matching query against title and body (case-insensitive). Returns JSON array of matching tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Supports filtering, sorting, and pagination.")]
+    #[rmcp::tool(description = "Search tasks by matching query against title and body (case-insensitive). Archive-stage tasks (done, cancelled) are hidden by default; pass status or stage to include them. Returns JSON array of matching tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Supports filtering, sorting, and pagination.")]
     fn search_tasks(
         &self,
         Parameters(params): Parameters<SearchTasksParams>,
@@ -563,9 +558,10 @@ impl StackydoMcp {
             Err(e) => return err_to_string(e),
         };
 
-        // Exclude soft-deleted unless explicitly requested
-        if params.status.as_deref() != Some("deleted") {
-            tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
+        // Hide archive-stage tasks by default unless filtering by status or stage
+        if params.status.is_none() && params.stage.is_none() {
+            let workflow = active_workflow();
+            tasks.retain(|t| !workflow.is_terminal(&t.frontmatter.status));
         }
 
         // Apply filters
@@ -573,6 +569,7 @@ impl StackydoMcp {
             &mut tasks,
             &FilterParams {
                 status: params.status.as_deref(),
+                stage: params.stage.as_deref(),
                 tag: params.tag.as_deref(),
                 priority: params.priority.as_deref(),
                 stack: params.stack.as_deref(),
@@ -628,31 +625,32 @@ impl StackydoMcp {
         }
     }
 
-    #[rmcp::tool(description = "Get summary statistics: total tasks, overdue count, breakdown by status/stack/tag.")]
+    #[rmcp::tool(description = "Get summary statistics: total tasks, overdue count, breakdown by status/stage/stack/tag.")]
     fn get_stats(&self) -> String {
         let store = TaskStore::new();
-        let mut tasks = match store.load_all() {
+        let tasks = match store.load_all() {
             Ok(t) => t,
             Err(e) => return err_to_string(e),
         };
-        tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
+        let workflow = active_workflow();
         let now = Utc::now();
 
         let total = tasks.len();
         let mut by_status: BTreeMap<String, usize> = BTreeMap::new();
+        let mut by_stage: BTreeMap<String, usize> = BTreeMap::new();
         let mut by_stack: BTreeMap<String, StackStatsJson> = BTreeMap::new();
         let mut tags: BTreeMap<String, usize> = BTreeMap::new();
         let mut overdue = 0usize;
 
         for task in &tasks {
-            let status_str = task.frontmatter.status.to_string();
+            let status_str = task.frontmatter.status.clone();
             *by_status.entry(status_str.clone()).or_default() += 1;
 
+            let stage = workflow.stage_for(&status_str);
+            *by_stage.entry(stage.to_string()).or_default() += 1;
+
             if let Some(due) = task.frontmatter.due {
-                if due < now
-                    && task.frontmatter.status != TaskStatus::Done
-                    && task.frontmatter.status != TaskStatus::Cancelled
-                {
+                if due < now && !workflow.is_terminal(&status_str) {
                     overdue += 1;
                 }
             }
@@ -680,6 +678,7 @@ impl StackydoMcp {
             total,
             overdue,
             by_status,
+            by_stage,
             by_stack,
             tags,
         };
@@ -867,11 +866,10 @@ impl StackydoMcp {
     fn get_stacks(&self) -> String {
         let store = TaskStore::new();
         let manifest_store = ManifestStore::new();
-        let mut tasks = match store.load_all() {
+        let tasks = match store.load_all() {
             Ok(t) => t,
             Err(e) => return err_to_string(e),
         };
-        tasks.retain(|t| t.frontmatter.status != TaskStatus::Deleted);
         let manifest = match manifest_store.load() {
             Ok(m) => m,
             Err(e) => return err_to_string(e),
@@ -900,8 +898,7 @@ impl StackydoMcp {
             if let Some(ref stack) = task.frontmatter.stack {
                 if let Some(info) = stack_infos.get_mut(stack) {
                     info.total += 1;
-                    let status_str = task.frontmatter.status.to_string();
-                    *info.by_status.entry(status_str).or_default() += 1;
+                    *info.by_status.entry(task.frontmatter.status.clone()).or_default() += 1;
                 }
             }
         }
@@ -923,6 +920,7 @@ struct StatsJson {
     total: usize,
     overdue: usize,
     by_status: BTreeMap<String, usize>,
+    by_stage: BTreeMap<String, usize>,
     by_stack: BTreeMap<String, StackStatsJson>,
     tags: BTreeMap<String, usize>,
 }

@@ -155,7 +155,7 @@ fn serialize_task(task: &Task) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::task::{Priority, TaskStatus};
+    use crate::model::task::Priority;
 
     #[test]
     fn roundtrip_serialize_parse() {
@@ -164,7 +164,7 @@ mod tests {
         let parsed = parse_task(&md).expect("parse should succeed");
         assert_eq!(parsed.frontmatter.id, "TEST123");
         assert_eq!(parsed.frontmatter.title, "Test task");
-        assert_eq!(parsed.frontmatter.status, TaskStatus::Todo);
+        assert_eq!(parsed.frontmatter.status, "todo");
     }
 
     #[test]
@@ -280,18 +280,19 @@ With multiple paragraphs.
 #[cfg(test)]
 mod proptest_tests {
     use super::*;
-    use crate::model::task::{ContextInfo, Priority, TaskStatus};
+    use crate::model::task::{ContextInfo, Priority};
     use chrono::{DateTime, TimeZone, Utc};
     use proptest::prelude::*;
 
-    fn arb_status() -> impl Strategy<Value = TaskStatus> {
+    fn arb_status() -> impl Strategy<Value = String> {
         prop_oneof![
-            Just(TaskStatus::Todo),
-            Just(TaskStatus::InProgress),
-            Just(TaskStatus::Done),
-            Just(TaskStatus::Blocked),
-            Just(TaskStatus::Cancelled),
-            Just(TaskStatus::Deleted),
+            Just("todo".to_string()),
+            Just("on_hold".to_string()),
+            Just("in_progress".to_string()),
+            Just("blocked".to_string()),
+            Just("in_review".to_string()),
+            Just("done".to_string()),
+            Just("cancelled".to_string()),
         ]
     }
 

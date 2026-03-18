@@ -1,5 +1,6 @@
 use crate::error::{Result, TodoError};
-use crate::model::task::{Priority, Task, TaskFrontmatter, TaskStatus};
+use crate::model::task::{Priority, Stage, Task, TaskFrontmatter, WorkflowConfig};
+use crate::storage::manifest_store::ManifestStore;
 use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use serde::Serialize;
 
@@ -46,6 +47,14 @@ pub fn stack_filter_matches(pattern: &str, task_stack: Option<&str>) -> bool {
 pub fn active_stack_filter() -> Option<String> {
     crate::storage::paths::TodoPaths::resolved_config()
         .and_then(|c| c.config.stack_filter.clone())
+}
+
+/// Load the workflow config from the manifest, falling back to defaults.
+pub fn active_workflow() -> WorkflowConfig {
+    ManifestStore::new()
+        .load()
+        .map(|m| m.workflow)
+        .unwrap_or_default()
 }
 
 /// Parse a flexible due date string into UTC DateTime.
@@ -118,12 +127,12 @@ pub fn format_task_row(fm: &TaskFrontmatter) -> String {
 /// Check if a task matches the given filter criteria.
 pub fn matches_filters(
     task: &Task,
-    status: Option<&TaskStatus>,
+    status: Option<&str>,
     tag: Option<&str>,
     stack: Option<&str>,
 ) -> bool {
     if let Some(s) = status {
-        if &task.frontmatter.status != s {
+        if task.frontmatter.status != s {
             return false;
         }
     }
@@ -165,6 +174,7 @@ pub fn print_json_array<T: Serialize>(values: &[T]) -> Result<()> {
 /// Parameters for filtering tasks (shared between CLI and MCP).
 pub struct FilterParams<'a> {
     pub status: Option<&'a str>,
+    pub stage: Option<&'a str>,
     pub tag: Option<&'a str>,
     pub priority: Option<&'a str>,
     pub stack: Option<&'a str>,
@@ -176,12 +186,22 @@ pub struct FilterParams<'a> {
 
 /// Apply all filters in-place. Returns Err if a filter value is invalid.
 pub fn apply_filters(tasks: &mut Vec<Task>, f: &FilterParams) -> Result<()> {
+    let workflow = active_workflow();
+
     // Status
     if let Some(status_str) = f.status {
-        let s = status_str
-            .parse::<TaskStatus>()
+        let canonical = workflow
+            .validate_status(status_str)
             .map_err(TodoError::Other)?;
-        tasks.retain(|t| t.frontmatter.status == s);
+        tasks.retain(|t| t.frontmatter.status == canonical);
+    }
+
+    // Stage
+    if let Some(stage_str) = f.stage {
+        let stage = stage_str
+            .parse::<Stage>()
+            .map_err(TodoError::Other)?;
+        tasks.retain(|t| workflow.stage_for(&t.frontmatter.status) == stage);
     }
 
     // Tag
@@ -220,10 +240,7 @@ pub fn apply_filters(tasks: &mut Vec<Task>, f: &FilterParams) -> Result<()> {
         let now = Utc::now();
         tasks.retain(|t| {
             if let Some(due) = t.frontmatter.due {
-                due < now
-                    && t.frontmatter.status != TaskStatus::Done
-                    && t.frontmatter.status != TaskStatus::Cancelled
-                    && t.frontmatter.status != TaskStatus::Deleted
+                due < now && !workflow.is_terminal(&t.frontmatter.status)
             } else {
                 false
             }

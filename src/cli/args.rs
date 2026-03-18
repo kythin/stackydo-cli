@@ -124,7 +124,7 @@ pub struct UpdateArgs {
     #[arg(long)]
     pub title: Option<String>,
 
-    /// New status: todo, in_progress, done, blocked, cancelled
+    /// New status: todo, in_progress, done, blocked, cancelled, on_hold, in_review
     #[arg(long)]
     pub status: Option<String>,
 
@@ -175,9 +175,13 @@ pub struct UpdateArgs {
 
 #[derive(Parser)]
 pub struct ListArgs {
-    /// Filter by status: todo, in_progress, done, blocked, cancelled
+    /// Filter by status: todo, in_progress, done, blocked, cancelled, on_hold, in_review
     #[arg(long)]
     pub status: Option<String>,
+
+    /// Filter by stage: backlog, active, archive
+    #[arg(long)]
+    pub stage: Option<String>,
 
     /// Filter by tag
     #[arg(long)]
@@ -215,7 +219,7 @@ pub struct ListArgs {
     #[arg(long)]
     pub full: bool,
 
-    /// Show only overdue tasks (due before now, not done/cancelled)
+    /// Show only overdue tasks (due before now, not in archive stage)
     #[arg(long)]
     pub overdue: bool,
 
@@ -299,9 +303,13 @@ pub struct SearchArgs {
     /// Search query (matched against title and body)
     pub query: String,
 
-    /// Filter by status: todo, in_progress, done, blocked, cancelled
+    /// Filter by status: todo, in_progress, done, blocked, cancelled, on_hold, in_review
     #[arg(long)]
     pub status: Option<String>,
+
+    /// Filter by stage: backlog, active, archive
+    #[arg(long)]
+    pub stage: Option<String>,
 
     /// Filter by tag
     #[arg(long)]
@@ -339,7 +347,7 @@ pub struct SearchArgs {
     #[arg(long)]
     pub full: bool,
 
-    /// Show only overdue tasks (due before now, not done/cancelled)
+    /// Show only overdue tasks (due before now, not in archive stage)
     #[arg(long)]
     pub overdue: bool,
 

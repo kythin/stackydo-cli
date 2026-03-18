@@ -1,7 +1,7 @@
 use crate::cli::args::UpdateArgs;
-use crate::commands::util::parse_due_date;
+use crate::commands::util::{active_workflow, parse_due_date};
 use crate::error::{Result, TodoError};
-use crate::model::task::{Dependency, DependencyType, Priority, TaskStatus};
+use crate::model::task::{Dependency, DependencyType, Priority};
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
 use chrono::Utc;
@@ -22,10 +22,11 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
 
     // Status
     if let Some(ref status_str) = args.status {
-        let status = status_str
-            .parse::<TaskStatus>()
+        let workflow = active_workflow();
+        let canonical = workflow
+            .validate_status(status_str)
             .map_err(TodoError::Other)?;
-        task.frontmatter.status = status;
+        task.frontmatter.status = canonical;
         changed = true;
     }
 

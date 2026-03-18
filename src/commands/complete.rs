@@ -1,7 +1,6 @@
 use crate::cli::args::CompleteArgs;
-use crate::commands::util::matches_filters;
+use crate::commands::util::{active_workflow, matches_filters};
 use crate::error::{Result, TodoError};
-use crate::model::task::TaskStatus;
 use crate::storage::task_store::TaskStore;
 use chrono::Utc;
 
@@ -11,7 +10,7 @@ pub fn execute(args: &CompleteArgs) -> Result<()> {
     // Single-task mode
     if let Some(ref id) = args.id {
         let mut task = crate::commands::show::resolve_task_pub(&store, id)?;
-        task.frontmatter.status = TaskStatus::Done;
+        task.frontmatter.status = "done".to_string();
         task.frontmatter.modified = Utc::now();
         store.save(&task)?;
         println!(
@@ -37,8 +36,9 @@ pub fn execute(args: &CompleteArgs) -> Result<()> {
         ));
     }
 
+    let workflow = active_workflow();
     let status_filter = match &args.status {
-        Some(s) => Some(s.parse::<TaskStatus>().map_err(TodoError::Other)?),
+        Some(s) => Some(workflow.validate_status(s).map_err(TodoError::Other)?),
         None => None,
     };
     let tag_filter = args.tag.as_deref();
@@ -48,13 +48,13 @@ pub fn execute(args: &CompleteArgs) -> Result<()> {
     let mut count = 0;
 
     for mut task in tasks {
-        // Skip already-done tasks
-        if task.frontmatter.status == TaskStatus::Done {
+        // Skip tasks already in a terminal (archive) stage
+        if workflow.is_terminal(&task.frontmatter.status) {
             continue;
         }
 
-        if matches_filters(&task, status_filter.as_ref(), tag_filter, stack_filter) {
-            task.frontmatter.status = TaskStatus::Done;
+        if matches_filters(&task, status_filter.as_deref(), tag_filter, stack_filter) {
+            task.frontmatter.status = "done".to_string();
             task.frontmatter.modified = Utc::now();
             store.save(&task)?;
             println!(

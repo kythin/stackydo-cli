@@ -34,7 +34,7 @@ The smoke test sets `STACKYDO_DIR=tests/.test-data/` so it never touches `~/.sta
 
 - **`src/main.rs`** — CLI entrypoint: parses clap args, dispatches to command handlers or launches TUI when no subcommand given
 - **`src/mcp_bin.rs`** — MCP server entrypoint: runs `StackydoMcp` over stdio transport using rmcp
-- **`src/model/`** — Core types: `Task`, `TaskFrontmatter`, `Manifest`, `ContextInfo`, status/priority/dependency enums
+- **`src/model/`** — Core types: `Task`, `TaskFrontmatter`, `Manifest`, `ContextInfo`, `Stage` enum, `WorkflowConfig`, priority/dependency enums
 - **`src/storage/`** — Filesystem persistence: markdown+YAML task files (`TaskStore`), JSON manifest (`ManifestStore`), path resolution (`TodoPaths`)
 - **`src/context/`** — Auto-capture: git info via git2 (`git_context`), `.stackydo-context` file discovery (`dir_context`), combined capture (`todo_context`)
 - **`src/cli/`** — clap derive argument definitions (`args.rs`)
@@ -54,6 +54,7 @@ The smoke test sets `STACKYDO_DIR=tests/.test-data/` so it never touches `~/.sta
 - `$STACKYDO_LAST_ID` env var chains tasks created in the same shell session
 - Task graph: subtasks (parent_id/subtask_ids) + dependencies (blocked_by, blocks, related_to)
 - **Stacks**: each task has an optional `stack: Option<String>` field (one stack per task); manifest tracks known stack names
+- **Stage/Status workflow**: `TaskFrontmatter.status` is a `String` (not an enum). `Stage` is a fixed enum (Backlog, Active, Archive) computed from status via `WorkflowConfig`. Default statuses: todo/on_hold (Backlog), in_progress/blocked/in_review (Active), done/cancelled (Archive). Archive-stage tasks are hidden from list/search by default. Delete is always a file operation — no soft-delete. `WorkflowConfig` stored in manifest with `#[serde(default)]` for backward compat.
 - Storage layer uses concrete types (not trait objects) — `TaskStore`, `ManifestStore`
 - Task ID resolution supports prefix matching (e.g. `stackydo show 01HQ` matches the full ULID)
 
