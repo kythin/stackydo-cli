@@ -230,11 +230,10 @@ fn err_to_string(e: impl std::fmt::Display) -> String {
 
 #[tool_router]
 impl StackydoMcp {
-    #[rmcp::tool(description = "List tasks with optional filters and sorting. Archive-stage tasks (done, cancelled) are hidden by default; pass status or stage to include them. Returns JSON array of tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Use offset for pagination.")]
-    fn list_tasks(
-        &self,
-        Parameters(params): Parameters<ListTasksParams>,
-    ) -> String {
+    #[rmcp::tool(
+        description = "List tasks with optional filters and sorting. Archive-stage tasks (done, cancelled) are hidden by default; pass status or stage to include them. Returns JSON array of tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Use offset for pagination."
+    )]
+    fn list_tasks(&self, Parameters(params): Parameters<ListTasksParams>) -> String {
         let store = TaskStore::new();
         let mut tasks = match store.load_all() {
             Ok(t) => t,
@@ -266,7 +265,11 @@ impl StackydoMcp {
         }
 
         // Sort
-        if let Err(e) = apply_sort(&mut tasks, params.sort.as_deref().unwrap_or("created"), false) {
+        if let Err(e) = apply_sort(
+            &mut tasks,
+            params.sort.as_deref().unwrap_or("created"),
+            false,
+        ) {
             return err_to_string(e);
         }
 
@@ -283,32 +286,48 @@ impl StackydoMcp {
                 if full {
                     let mut groups: BTreeMap<String, Vec<TaskJson>> = BTreeMap::new();
                     for task in &tasks {
-                        let key = task.frontmatter.stack.clone().unwrap_or_else(|| "(no stack)".to_string());
+                        let key = task
+                            .frontmatter
+                            .stack
+                            .clone()
+                            .unwrap_or_else(|| "(no stack)".to_string());
                         groups.entry(key).or_default().push(TaskJson::from(task));
                     }
                     return serde_json::to_string(&groups).unwrap_or_else(err_to_string);
                 } else {
                     let mut groups: BTreeMap<String, Vec<TaskSummaryJson>> = BTreeMap::new();
                     for task in &tasks {
-                        let key = task.frontmatter.stack.clone().unwrap_or_else(|| "(no stack)".to_string());
-                        groups.entry(key).or_default().push(TaskSummaryJson::from(task));
+                        let key = task
+                            .frontmatter
+                            .stack
+                            .clone()
+                            .unwrap_or_else(|| "(no stack)".to_string());
+                        groups
+                            .entry(key)
+                            .or_default()
+                            .push(TaskSummaryJson::from(task));
                     }
                     return serde_json::to_string(&groups).unwrap_or_else(err_to_string);
                 }
             }
-            return err_to_string(format!("Unknown group_by field: '{group_field}'. Supported: stack"));
+            return err_to_string(format!(
+                "Unknown group_by field: '{group_field}'. Supported: stack"
+            ));
         }
 
         if full {
             let json_tasks: Vec<TaskJson> = tasks.iter().map(TaskJson::from).collect();
             serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
         } else {
-            let json_tasks: Vec<TaskSummaryJson> = tasks.iter().map(TaskSummaryJson::from).collect();
+            let json_tasks: Vec<TaskSummaryJson> =
+                tasks.iter().map(TaskSummaryJson::from).collect();
             serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
         }
     }
 
-    #[rmcp::tool(description = "Get a single task by ID (supports prefix matching). Returns full task JSON including body and context.")]
+    #[rmcp::tool(
+        description = "Get a single task by ID (supports prefix matching). Returns full task JSON including body and context."
+    )]
     fn get_task(&self, Parameters(params): Parameters<GetTaskParams>) -> String {
         let store = TaskStore::new();
         match resolve_task_pub(&store, &params.id) {
@@ -321,10 +340,7 @@ impl StackydoMcp {
     }
 
     #[rmcp::tool(description = "Create a new task. Returns the new task's ULID on success.")]
-    fn create_task(
-        &self,
-        Parameters(params): Parameters<CreateTaskParams>,
-    ) -> String {
+    fn create_task(&self, Parameters(params): Parameters<CreateTaskParams>) -> String {
         let store = TaskStore::new();
         let manifest_store = ManifestStore::new();
         let id = ulid::Ulid::new().to_string();
@@ -399,11 +415,10 @@ impl StackydoMcp {
         }
     }
 
-    #[rmcp::tool(description = "Update an existing task. Returns confirmation and updated task JSON. Body operations apply in order: body_replace (set body), body_sub (sed-style s/pat/repl/[g] substitution), body_append (append text), note (timestamped append). Use dry_run=true to preview the resulting body without saving.")]
-    fn update_task(
-        &self,
-        Parameters(params): Parameters<UpdateTaskParams>,
-    ) -> String {
+    #[rmcp::tool(
+        description = "Update an existing task. Returns confirmation and updated task JSON. Body operations apply in order: body_replace (set body), body_sub (sed-style s/pat/repl/[g] substitution), body_append (append text), note (timestamped append). Use dry_run=true to preview the resulting body without saving."
+    )]
+    fn update_task(&self, Parameters(params): Parameters<UpdateTaskParams>) -> String {
         let store = TaskStore::new();
         let manifest_store = ManifestStore::new();
         let mut task = match resolve_task_pub(&store, &params.id) {
@@ -562,10 +577,7 @@ impl StackydoMcp {
     }
 
     #[rmcp::tool(description = "Mark a task as done.")]
-    fn complete_task(
-        &self,
-        Parameters(params): Parameters<CompleteTaskParams>,
-    ) -> String {
+    fn complete_task(&self, Parameters(params): Parameters<CompleteTaskParams>) -> String {
         let store = TaskStore::new();
         let mut task = match resolve_task_pub(&store, &params.id) {
             Ok(t) => t,
@@ -586,10 +598,7 @@ impl StackydoMcp {
     }
 
     #[rmcp::tool(description = "Delete a task permanently (removes the file).")]
-    fn delete_task(
-        &self,
-        Parameters(params): Parameters<DeleteTaskParams>,
-    ) -> String {
+    fn delete_task(&self, Parameters(params): Parameters<DeleteTaskParams>) -> String {
         let store = TaskStore::new();
         let manifest_store = ManifestStore::new();
 
@@ -622,11 +631,10 @@ impl StackydoMcp {
         }
     }
 
-    #[rmcp::tool(description = "Search tasks by matching query against title and body (case-insensitive). Archive-stage tasks (done, cancelled) are hidden by default; pass status or stage to include them. Returns JSON array of matching tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Supports filtering, sorting, and pagination.")]
-    fn search_tasks(
-        &self,
-        Parameters(params): Parameters<SearchTasksParams>,
-    ) -> String {
+    #[rmcp::tool(
+        description = "Search tasks by matching query against title and body (case-insensitive). Archive-stage tasks (done, cancelled) are hidden by default; pass status or stage to include them. Returns JSON array of matching tasks (frontmatter only by default; set full=true to include body). Default limit: 50 (set limit=0 for no limit). Supports filtering, sorting, and pagination."
+    )]
+    fn search_tasks(&self, Parameters(params): Parameters<SearchTasksParams>) -> String {
         let store = TaskStore::new();
         let mut tasks = match store.search(&params.query) {
             Ok(t) => t,
@@ -658,7 +666,11 @@ impl StackydoMcp {
         }
 
         // Sort
-        if let Err(e) = apply_sort(&mut tasks, params.sort.as_deref().unwrap_or("created"), false) {
+        if let Err(e) = apply_sort(
+            &mut tasks,
+            params.sort.as_deref().unwrap_or("created"),
+            false,
+        ) {
             return err_to_string(e);
         }
 
@@ -675,32 +687,48 @@ impl StackydoMcp {
                 if full {
                     let mut groups: BTreeMap<String, Vec<TaskJson>> = BTreeMap::new();
                     for task in &tasks {
-                        let key = task.frontmatter.stack.clone().unwrap_or_else(|| "(no stack)".to_string());
+                        let key = task
+                            .frontmatter
+                            .stack
+                            .clone()
+                            .unwrap_or_else(|| "(no stack)".to_string());
                         groups.entry(key).or_default().push(TaskJson::from(task));
                     }
                     return serde_json::to_string(&groups).unwrap_or_else(err_to_string);
                 } else {
                     let mut groups: BTreeMap<String, Vec<TaskSummaryJson>> = BTreeMap::new();
                     for task in &tasks {
-                        let key = task.frontmatter.stack.clone().unwrap_or_else(|| "(no stack)".to_string());
-                        groups.entry(key).or_default().push(TaskSummaryJson::from(task));
+                        let key = task
+                            .frontmatter
+                            .stack
+                            .clone()
+                            .unwrap_or_else(|| "(no stack)".to_string());
+                        groups
+                            .entry(key)
+                            .or_default()
+                            .push(TaskSummaryJson::from(task));
                     }
                     return serde_json::to_string(&groups).unwrap_or_else(err_to_string);
                 }
             }
-            return err_to_string(format!("Unknown group_by field: '{group_field}'. Supported: stack"));
+            return err_to_string(format!(
+                "Unknown group_by field: '{group_field}'. Supported: stack"
+            ));
         }
 
         if full {
             let json_tasks: Vec<TaskJson> = tasks.iter().map(TaskJson::from).collect();
             serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
         } else {
-            let json_tasks: Vec<TaskSummaryJson> = tasks.iter().map(TaskSummaryJson::from).collect();
+            let json_tasks: Vec<TaskSummaryJson> =
+                tasks.iter().map(TaskSummaryJson::from).collect();
             serde_json::to_string(&json_tasks).unwrap_or_else(err_to_string)
         }
     }
 
-    #[rmcp::tool(description = "Get summary statistics: total tasks, overdue count, breakdown by status/stage/stack/tag.")]
+    #[rmcp::tool(
+        description = "Get summary statistics: total tasks, overdue count, breakdown by status/stage/stack/tag."
+    )]
     fn get_stats(&self) -> String {
         let store = TaskStore::new();
         let tasks = match store.load_all() {
@@ -760,21 +788,21 @@ impl StackydoMcp {
         serde_json::to_string(&output).unwrap_or_else(err_to_string)
     }
 
-    #[rmcp::tool(description = "Discover and list all stackydo workspaces on the system. Returns JSON array of workspace info including store path, task count, stacks, and project name.")]
+    #[rmcp::tool(
+        description = "Discover and list all stackydo workspaces on the system. Returns JSON array of workspace info including store path, task count, stacks, and project name."
+    )]
     fn list_workspaces(
         &self,
-        #[allow(unused_variables)]
-        Parameters(params): Parameters<ListWorkspacesParams>,
+        #[allow(unused_variables)] Parameters(params): Parameters<ListWorkspacesParams>,
     ) -> String {
         let workspaces = workspace::discover_workspaces();
         serde_json::to_string(&workspaces).unwrap_or_else(err_to_string)
     }
 
-    #[rmcp::tool(description = "Move or copy tasks between workspaces. Requires source and dest paths. Use dry_run to preview. Returns summary of migrated tasks.")]
-    fn migrate_tasks(
-        &self,
-        Parameters(params): Parameters<MigrateTasksParams>,
-    ) -> String {
+    #[rmcp::tool(
+        description = "Move or copy tasks between workspaces. Requires source and dest paths. Use dry_run to preview. Returns summary of migrated tasks."
+    )]
+    fn migrate_tasks(&self, Parameters(params): Parameters<MigrateTasksParams>) -> String {
         let source_dir = match workspace::resolve_workspace_path(&params.source) {
             Ok(d) => d,
             Err(e) => return err_to_string(format!("Invalid source: {e}")),
@@ -882,7 +910,10 @@ impl StackydoMcp {
                 .iter()
                 .map(|t| {
                     let prefix = &t.frontmatter.id[..t.frontmatter.id.len().min(10)];
-                    format!("  {} {} [{}]", prefix, t.frontmatter.title, t.frontmatter.status)
+                    format!(
+                        "  {} {} [{}]",
+                        prefix, t.frontmatter.title, t.frontmatter.status
+                    )
                 })
                 .collect();
             return format!(
@@ -899,11 +930,15 @@ impl StackydoMcp {
             );
         }
 
-        // Execute migration
-        let dest_manifest =
-            ManifestStore::with_path(dest_dir.join("manifest.json"));
+        // Execute migration, re-assigning short_ids from destination's counter
+        let dest_manifest = ManifestStore::with_path(dest_dir.join("manifest.json"));
         for task in &to_migrate {
-            if let Err(e) = dest_store.save(task) {
+            let mut task = (*task).clone();
+            // Re-assign short_id from destination workspace counter
+            if let Ok(sid) = dest_manifest.allocate_short_id() {
+                task.frontmatter.short_id = Some(sid);
+            }
+            if let Err(e) = dest_store.save(&task) {
                 return err_to_string(format!("Failed to save task: {e}"));
             }
             if let Some(ref stack) = task.frontmatter.stack {
@@ -915,8 +950,7 @@ impl StackydoMcp {
         }
 
         if is_move {
-            let source_manifest =
-                ManifestStore::with_path(source_dir.join("manifest.json"));
+            let source_manifest = ManifestStore::with_path(source_dir.join("manifest.json"));
             for task in &to_migrate {
                 let _ = source_store.delete(&task.frontmatter.id);
             }
@@ -973,7 +1007,10 @@ impl StackydoMcp {
             if let Some(ref stack) = task.frontmatter.stack {
                 if let Some(info) = stack_infos.get_mut(stack) {
                     info.total += 1;
-                    *info.by_status.entry(task.frontmatter.status.clone()).or_default() += 1;
+                    *info
+                        .by_status
+                        .entry(task.frontmatter.status.clone())
+                        .or_default() += 1;
                 }
             }
         }

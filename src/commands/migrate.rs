@@ -140,9 +140,7 @@ fn execute_interactive(args: &MigrateArgs) -> Result<()> {
         }
         set.into_iter().collect()
     };
-    let has_unstacked = all_tasks
-        .iter()
-        .any(|t| t.frontmatter.stack.is_none());
+    let has_unstacked = all_tasks.iter().any(|t| t.frontmatter.stack.is_none());
 
     let mut stack_choices = vec!["(all)".to_string()];
     stack_choices.append(&mut stack_names.clone());
@@ -159,10 +157,8 @@ fn execute_interactive(args: &MigrateArgs) -> Result<()> {
     let select_all_stacks = stack_selections.contains(&0);
     let selected_stacks: HashSet<Option<String>> = if select_all_stacks {
         // All stacks + unstacked
-        let mut set: HashSet<Option<String>> = stack_names
-            .iter()
-            .map(|s| Some(s.clone()))
-            .collect();
+        let mut set: HashSet<Option<String>> =
+            stack_names.iter().map(|s| Some(s.clone())).collect();
         set.insert(None);
         set
     } else {
@@ -336,7 +332,10 @@ fn select_tasks_by_args<'a>(
             if let Some(ref task_stack) = task.frontmatter.stack {
                 if stack_set.contains(task_stack.as_str()) {
                     // Avoid duplicates if also selected by ID
-                    if !selected.iter().any(|t| t.frontmatter.id == task.frontmatter.id) {
+                    if !selected
+                        .iter()
+                        .any(|t| t.frontmatter.id == task.frontmatter.id)
+                    {
                         selected.push(task);
                     }
                 }
@@ -481,10 +480,16 @@ fn do_migrate(
         None
     };
 
-    // Copy tasks to destination
+    // Copy tasks to destination, re-assigning short_ids from destination's counter
     let dest_manifest = ManifestStore::with_path(dest_dir.join("manifest.json"));
     for task in &to_migrate {
-        dest_store.save(task)?;
+        let mut task = (*task).clone();
+        // Re-assign short_id from destination workspace counter
+        match dest_manifest.allocate_short_id() {
+            Ok(sid) => task.frontmatter.short_id = Some(sid),
+            Err(e) => eprintln!("Warning: failed to allocate short ID: {e}"),
+        }
+        dest_store.save(&task)?;
 
         // Register stacks and tags in destination manifest
         if let Some(ref stack) = task.frontmatter.stack {
@@ -561,7 +566,10 @@ fn pre_migrate_git(store_dir: &Path) -> Result<Option<git2::Repository>> {
     let repo = match git2::Repository::open(&repo_root) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Warning: cannot open git repo at {}: {e}", repo_root.display());
+            eprintln!(
+                "Warning: cannot open git repo at {}: {e}",
+                repo_root.display()
+            );
             return Ok(None);
         }
     };
