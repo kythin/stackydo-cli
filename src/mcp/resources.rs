@@ -89,6 +89,8 @@ Low-priority captures for later review. Dedicated `ideas` stack or personal stac
 | `search_tasks` | Full-text search across titles and bodies |
 | `get_stats` | Summary statistics |
 | `get_stacks` | Stack listing with status counts |
+| `migrate_tasks` | Move or copy tasks between workspaces |
+| `list_workspaces` | Discover and list all stackydo workspaces |
 
 ## Prompts
 

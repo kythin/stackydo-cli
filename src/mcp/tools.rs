@@ -14,6 +14,7 @@ use crate::storage::task_store::TaskStore;
 use crate::storage::workspace;
 use chrono::Utc;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use super::StackydoMcp;
 
@@ -345,12 +346,9 @@ impl StackydoMcp {
         let manifest_store = ManifestStore::new();
         let id = ulid::Ulid::new().to_string();
 
-        let cwd = std::env::current_dir()
-            .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_else(|_| ".".into());
-
-        let context_path = std::env::current_dir().unwrap_or_else(|_| ".".into());
-        let ctx = dir_context::capture(&context_path);
+        let cwd_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let cwd = cwd_path.to_string_lossy().into_owned();
+        let ctx = dir_context::capture(&cwd_path);
 
         // Validate title
         let title = params.title.trim().to_string();
@@ -362,8 +360,7 @@ impl StackydoMcp {
         task.frontmatter.context = ctx;
 
         if let Some(body) = params.body {
-            // Convert literal \n escape sequences from MCP JSON to real newlines
-            task.body = body.replace("\\n", "\n");
+            task.body = body;
         }
 
         if let Some(ref pri_str) = params.priority {
@@ -501,7 +498,7 @@ impl StackydoMcp {
 
         // Body replace (step 1)
         if let Some(ref new_body) = params.body_replace {
-            task.body = new_body.replace("\\n", "\n");
+            task.body = new_body.clone();
             changed = true;
         }
 
@@ -523,20 +520,17 @@ impl StackydoMcp {
 
         // Body append (step 3)
         if let Some(ref append_text) = params.body_append {
-            let append_text = append_text.replace("\\n", "\n");
             if task.body.is_empty() {
-                task.body = append_text;
+                task.body = append_text.clone();
             } else {
                 task.body.push('\n');
-                task.body.push_str(&append_text);
+                task.body.push_str(append_text);
             }
             changed = true;
         }
 
         // Note — timestamped append (step 4)
         if let Some(ref note_text) = params.note {
-            // Convert literal \n escape sequences from MCP JSON to real newlines
-            let note_text = note_text.replace("\\n", "\n");
             let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M");
             let entry = format!("\n[{timestamp}] {note_text}");
             if task.body.is_empty() {
@@ -870,7 +864,11 @@ impl StackydoMcp {
             return "No tasks matched the given filters.".to_string();
         }
 
-        let is_move = params.operation.as_deref() == Some("move");
+        let is_move = match params.operation.as_deref().unwrap_or("copy") {
+            "move" => true,
+            "copy" => false,
+            op => return err_to_string(format!("Invalid operation: '{}'. Use 'move' or 'copy'.", op)),
+        };
         let dry_run = params.dry_run.unwrap_or(false);
         let force = params.force.unwrap_or(false);
         let op_str = if is_move { "Move" } else { "Copy" };
@@ -1004,6 +1002,9 @@ impl StackydoMcp {
             );
         }
 
+        let mut unstacked_count = 0usize;
+        let mut unstacked_by_status: BTreeMap<String, usize> = BTreeMap::new();
+
         for task in &tasks {
             if let Some(ref stack) = task.frontmatter.stack {
                 if let Some(info) = stack_infos.get_mut(stack) {
@@ -1013,7 +1014,22 @@ impl StackydoMcp {
                         .entry(task.frontmatter.status.clone())
                         .or_default() += 1;
                 }
+            } else {
+                unstacked_count += 1;
+                *unstacked_by_status
+                    .entry(task.frontmatter.status.clone())
+                    .or_default() += 1;
             }
+        }
+
+        if unstacked_count > 0 {
+            stack_infos.insert(
+                "(no stack)".to_string(),
+                StackStatsJson {
+                    total: unstacked_count,
+                    by_status: unstacked_by_status,
+                },
+            );
         }
 
         serde_json::to_string(&stack_infos).unwrap_or_else(err_to_string)
