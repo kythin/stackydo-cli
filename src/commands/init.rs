@@ -104,7 +104,13 @@ pub fn execute(args: &InitArgs) -> Result<()> {
 
                 // Only act if the workspace lives inside the parent repo.
                 if abs_root.starts_with(&abs_workdir) && abs_root != abs_workdir {
-                    let rel = abs_root.strip_prefix(&abs_workdir).unwrap();
+                    let rel = abs_root.strip_prefix(&abs_workdir).map_err(|_| {
+                        crate::error::TodoError::Other(format!(
+                            "Cannot compute relative path from '{}' to '{}'",
+                            abs_workdir.display(),
+                            abs_root.display()
+                        ))
+                    })?;
                     // Anchor the entry to the repo root with a leading slash.
                     let entry = format!("/{}", rel.display());
                     let rel_str = rel.to_string_lossy();
@@ -245,15 +251,17 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         if !doc.is_object() {
             doc = serde_json::json!({});
         }
-        let root_obj = doc.as_object_mut().unwrap();
+        let root_obj = doc
+            .as_object_mut()
+            .ok_or_else(|| crate::error::TodoError::Other("Failed to parse .mcp.json as a JSON object".into()))?;
         if !root_obj.contains_key("mcpServers") {
             root_obj.insert("mcpServers".to_string(), serde_json::json!({}));
         }
         let servers = root_obj
             .get_mut("mcpServers")
-            .unwrap()
+            .ok_or_else(|| crate::error::TodoError::Other("Missing 'mcpServers' key in .mcp.json".into()))?
             .as_object_mut()
-            .unwrap();
+            .ok_or_else(|| crate::error::TodoError::Other("'mcpServers' in .mcp.json is not a JSON object".into()))?;
         let already_had = servers.contains_key("stackydo");
         servers.insert("stackydo".to_string(), server_entry);
 

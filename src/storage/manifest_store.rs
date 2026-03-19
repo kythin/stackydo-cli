@@ -82,7 +82,7 @@ impl ManifestStore {
         let lock_file = fs::OpenOptions::new()
             .create(true)
             .write(true)
-            .truncate(true)
+            .truncate(false)
             .open(&lock_path)?;
         lock_file.lock_exclusive()?;
 

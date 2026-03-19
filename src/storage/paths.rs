@@ -70,7 +70,7 @@ impl TodoPaths {
                 let config_dir = resolved_config
                     .file_path
                     .parent()
-                    .expect("config file must have a parent directory");
+                    .unwrap_or_else(|| std::path::Path::new("."));
                 let root = config_dir.join(dir_field);
                 return ResolvedPaths {
                     root,
@@ -96,7 +96,10 @@ impl TodoPaths {
 
     fn default_root() -> PathBuf {
         dirs::home_dir()
-            .expect("Cannot determine home directory")
+            .unwrap_or_else(|| {
+                eprintln!("warning: cannot determine home directory; using /tmp/stackydo-fallback");
+                PathBuf::from("/tmp/stackydo-fallback")
+            })
             .join(".stackydo")
     }
 
@@ -163,7 +166,10 @@ impl TodoPaths {
     /// Fallback `~/.stackydo.json` path
     pub fn home_config() -> PathBuf {
         dirs::home_dir()
-            .expect("Cannot determine home directory")
+            .unwrap_or_else(|| {
+                eprintln!("warning: cannot determine home directory; using /tmp/stackydo-fallback");
+                PathBuf::from("/tmp/stackydo-fallback")
+            })
             .join(".stackydo.json")
     }
 }
