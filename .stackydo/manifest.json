@@ -1,26 +1,46 @@
 {
   "version": "1.0",
   "tags": [
-    "storage",
-    "ai",
     "config",
-    "model",
-    "tui",
     "cli",
+    "short-id",
+    "testing",
+    "ai",
+    "tui",
     "breaking",
-    "docs",
     "mcp",
+    "dx",
+    "migrate",
+    "docs",
+    "storage",
     "ux",
-    "dx"
+    "model"
   ],
   "stacks": [
-    "ideas"
+    "ideas",
+    "bugs"
   ],
   "features": {},
   "settings": {
     "default_sort": "created",
     "auto_capture_git": true,
-    "quick_list_limit": 50,
-    "soft_delete": false
+    "quick_list_limit": 50
+  },
+  "workflow": {
+    "statuses": {
+      "blocked": "active",
+      "cancelled": "archive",
+      "deleted": "archive",
+      "done": "archive",
+      "in_progress": "active",
+      "in_review": "active",
+      "on_hold": "backlog",
+      "todo": "backlog"
+    },
+    "aliases": {
+      "canceled": "cancelled",
+      "doing": "in_progress",
+      "inprogress": "in_progress"
+    }
   }
 }

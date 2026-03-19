@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/chris/Documents/Projects/CLIs/stackydo-cli && cargo fmt --quiet 2>&1 && cargo clippy --quiet --message-format=short 2>&1 | head -20",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qiE '\\.(env|secret|token|key)$|config\\.toml|credentials'; then echo 'BLOCK: Refusing to edit potentially sensitive file. Review manually.' >&2; exit 1; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
