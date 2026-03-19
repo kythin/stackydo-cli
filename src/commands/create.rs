@@ -45,10 +45,9 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
         args.body.join(" ")
     };
 
-    // Determine title
-    let title = args
-        .title
-        .clone()
+    // Determine title — treat whitespace-only explicit title as if it wasn't provided
+    let explicit_title = args.title.as_deref().filter(|t| !t.trim().is_empty()).map(|t| t.to_string());
+    let title = explicit_title
         .or_else(|| {
             // Use first line of body if no explicit title
             body.lines().next().map(|l| {
@@ -72,7 +71,10 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
 
     // Parse optional fields
     if let Some(ref p) = args.priority {
-        task.frontmatter.priority = Some(p.parse::<Priority>().map_err(TodoError::Other)?);
+        // "none" or empty means no priority (same behaviour as update --priority none)
+        if !p.eq_ignore_ascii_case("none") && !p.is_empty() {
+            task.frontmatter.priority = Some(p.parse::<Priority>().map_err(TodoError::Other)?);
+        }
     }
 
     if let Some(ref tags_csv) = args.tags {

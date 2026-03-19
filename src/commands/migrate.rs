@@ -303,22 +303,41 @@ fn select_tasks_by_args<'a>(
 
     let mut selected: Vec<&crate::model::task::Task> = Vec::new();
 
-    // Filter by specific task IDs
+    // Filter by specific task IDs (supports short IDs, ULID prefixes, exact ULIDs)
     if !task_ids.is_empty() {
-        for id_prefix in task_ids {
-            let matches: Vec<_> = all_tasks
+        // Build a temporary store scoped to all_tasks for resolve_task_pub
+        // Since resolve_task_pub operates on the real store, we need a real store.
+        // Instead, replicate the resolution logic here using the loaded tasks.
+        for id_input in task_ids {
+            // Exact ULID match
+            if let Some(task) = all_tasks.iter().find(|t| t.frontmatter.id == *id_input) {
+                selected.push(task);
+                continue;
+            }
+            // Exact short_id match (e.g. SD1)
+            if let Some(task) = all_tasks
                 .iter()
-                .filter(|t| t.frontmatter.id.starts_with(id_prefix))
+                .find(|t| t.frontmatter.short_id.as_deref() == Some(id_input.as_str()))
+            {
+                selected.push(task);
+                continue;
+            }
+            // ULID prefix match
+            let prefix_matches: Vec<_> = all_tasks
+                .iter()
+                .filter(|t| t.frontmatter.id.starts_with(id_input.as_str()))
                 .collect();
-            match matches.len() {
+            match prefix_matches.len() {
                 0 => {
-                    eprintln!("Warning: no task matching prefix '{id_prefix}'");
+                    return Err(TodoError::Other(format!(
+                        "No task found matching '{id_input}'"
+                    )));
                 }
-                1 => selected.push(matches[0]),
+                1 => selected.push(prefix_matches[0]),
                 _ => {
                     return Err(TodoError::Other(format!(
-                        "Ambiguous task prefix '{id_prefix}' — matches {} tasks. Use a longer prefix.",
-                        matches.len()
+                        "Ambiguous task ID '{id_input}' — matches {} tasks. Use a longer prefix.",
+                        prefix_matches.len()
                     )));
                 }
             }

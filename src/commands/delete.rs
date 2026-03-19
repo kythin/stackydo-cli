@@ -50,7 +50,9 @@ pub fn execute(args: &DeleteArgs) -> Result<()> {
                     .subtask_ids
                     .retain(|s| s != &task.frontmatter.id);
                 parent.frontmatter.modified = chrono::Utc::now();
-                let _ = store.save(&parent);
+                if let Err(e) = store.save(&parent) {
+                    eprintln!("Warning: failed to update parent task: {e}");
+                }
             }
         }
 

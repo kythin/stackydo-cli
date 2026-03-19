@@ -43,11 +43,7 @@ pub fn execute(args: &ListArgs) -> Result<()> {
     // Sort
     apply_sort(&mut tasks, &args.sort, args.reverse)?;
 
-    // Pagination
-    let limit = effective_limit(args.limit);
-    let info = apply_pagination(&mut tasks, args.offset, limit);
-
-    // Group-by handling
+    // Group-by handling (no pagination — show all matching tasks grouped)
     if let Some(ref group_field) = args.group_by {
         match group_field.as_str() {
             "stack" => {
@@ -92,7 +88,6 @@ pub fn execute(args: &ListArgs) -> Result<()> {
                         println!("  {}", format_task_row(&task.frontmatter));
                     }
                 }
-                print_pagination_footer(&info, "task");
                 return Ok(());
             }
             other => {
@@ -102,6 +97,10 @@ pub fn execute(args: &ListArgs) -> Result<()> {
             }
         }
     }
+
+    // Pagination (only for non-grouped output)
+    let limit = effective_limit(args.limit);
+    let info = apply_pagination(&mut tasks, args.offset, limit);
 
     // JSON output
     if args.json {
