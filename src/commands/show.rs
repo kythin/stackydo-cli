@@ -16,6 +16,9 @@ pub fn execute(args: &ShowArgs) -> Result<()> {
     let fm = &task.frontmatter;
 
     println!("ID:       {}", fm.id);
+    if let Some(ref sid) = fm.short_id {
+        println!("Short ID: {sid}");
+    }
     println!("Title:    {}", fm.title);
     println!("Status:   {}", fm.status);
     if let Some(ref p) = fm.priority {
@@ -92,25 +95,47 @@ pub fn execute(args: &ShowArgs) -> Result<()> {
 
 use crate::model::task::Task;
 
-/// Resolve a task ID by exact match or unique prefix.
+/// Resolve a task ID by exact match, short ID, or unique ULID prefix.
 /// Public so other commands (complete, delete) can reuse it.
 pub fn resolve_task_pub(store: &TaskStore, id_or_prefix: &str) -> crate::error::Result<Task> {
-    // Try exact match first
+    // Try exact ULID match first (file lookup, fast path)
     if let Ok(task) = store.load(id_or_prefix) {
         return Ok(task);
     }
 
-    // Try prefix match
     let all = store.load_all()?;
-    let prefix_lower = id_or_prefix.to_lowercase();
-    let matches: Vec<_> = all
-        .into_iter()
-        .filter(|t| t.frontmatter.id.to_lowercase().starts_with(&prefix_lower))
+    let input_lower = id_or_prefix.to_lowercase();
+
+    // Try exact short_id match (e.g. "SD42")
+    let short_matches: Vec<_> = all
+        .iter()
+        .filter(|t| {
+            t.frontmatter
+                .short_id
+                .as_ref()
+                .is_some_and(|s| s.to_lowercase() == input_lower)
+        })
         .collect();
 
-    match matches.len() {
+    match short_matches.len() {
+        1 => return Ok(short_matches[0].clone()),
+        n if n > 1 => {
+            return Err(crate::error::TodoError::Other(format!(
+                "Duplicate short ID '{id_or_prefix}': matches {n} tasks. Use the full ULID instead."
+            )))
+        }
+        _ => {} // 0 — fall through to prefix match
+    }
+
+    // Try ULID prefix match
+    let prefix_matches: Vec<_> = all
+        .into_iter()
+        .filter(|t| t.frontmatter.id.to_lowercase().starts_with(&input_lower))
+        .collect();
+
+    match prefix_matches.len() {
         0 => Err(crate::error::TodoError::TaskNotFound(id_or_prefix.into())),
-        1 => Ok(matches.into_iter().next().expect("len confirmed 1 item")),
+        1 => Ok(prefix_matches.into_iter().next().expect("len confirmed 1 item")),
         n => Err(crate::error::TodoError::Other(format!(
             "Ambiguous ID prefix '{id_or_prefix}': matches {n} tasks. Be more specific."
         ))),
