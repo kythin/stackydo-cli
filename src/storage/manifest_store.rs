@@ -186,4 +186,32 @@ mod tests {
         assert!(loaded.stacks.contains("test-stack"));
         assert_eq!(loaded.settings.quick_list_limit, 25);
     }
+
+    #[test]
+    fn allocate_short_id_increments() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = ManifestStore::with_path(dir.path().join("manifest.json"));
+
+        assert_eq!(store.allocate_short_id().unwrap(), "SD1");
+        assert_eq!(store.allocate_short_id().unwrap(), "SD2");
+        assert_eq!(store.allocate_short_id().unwrap(), "SD3");
+
+        let manifest = store.load().expect("load");
+        assert_eq!(manifest.next_short_id, 4);
+    }
+
+    #[test]
+    fn allocate_short_id_persists_across_reload() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("manifest.json");
+
+        // Allocate from first store instance
+        let store1 = ManifestStore::with_path(path.clone());
+        assert_eq!(store1.allocate_short_id().unwrap(), "SD1");
+        assert_eq!(store1.allocate_short_id().unwrap(), "SD2");
+
+        // Create new store instance pointing to same file
+        let store2 = ManifestStore::with_path(path);
+        assert_eq!(store2.allocate_short_id().unwrap(), "SD3");
+    }
 }
