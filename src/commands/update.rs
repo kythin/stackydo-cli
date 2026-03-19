@@ -1,5 +1,5 @@
 use crate::cli::args::UpdateArgs;
-use crate::commands::util::{active_workflow, parse_due_date};
+use crate::commands::util::{active_workflow, display_id, parse_due_date};
 use crate::error::{Result, TodoError};
 use crate::model::task::{Dependency, DependencyType, Priority};
 use crate::storage::manifest_store::ManifestStore;
@@ -35,11 +35,8 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
         if pri_str.eq_ignore_ascii_case("none") || pri_str.is_empty() {
             task.frontmatter.priority = None;
         } else {
-            task.frontmatter.priority = Some(
-                pri_str
-                    .parse::<Priority>()
-                    .map_err(TodoError::Other)?,
-            );
+            task.frontmatter.priority =
+                Some(pri_str.parse::<Priority>().map_err(TodoError::Other)?);
         }
         changed = true;
     }
@@ -144,10 +141,13 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
 
     // Body substitution (step 2)
     if let Some(ref expr) = args.body_sub {
-        let (regex, replacement, global) =
-            crate::commands::body_edit::parse_sed_expression(expr)?;
-        task.body =
-            crate::commands::body_edit::apply_substitution(&task.body, &regex, &replacement, global);
+        let (regex, replacement, global) = crate::commands::body_edit::parse_sed_expression(expr)?;
+        task.body = crate::commands::body_edit::apply_substitution(
+            &task.body,
+            &regex,
+            &replacement,
+            global,
+        );
         changed = true;
     }
 
@@ -200,7 +200,7 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
 
     println!(
         "Updated: {} — {}",
-        &task.frontmatter.id[..10],
+        display_id(&task.frontmatter),
         task.frontmatter.title
     );
 

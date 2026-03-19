@@ -6,10 +6,7 @@ use serde::Serialize;
 
 /// Case-insensitive glob match. Supports `*` as a wildcard (zero or more chars).
 pub fn glob_matches(pattern: &str, text: &str) -> bool {
-    glob_match_impl(
-        &pattern.to_lowercase(),
-        &text.to_lowercase(),
-    )
+    glob_match_impl(&pattern.to_lowercase(), &text.to_lowercase())
 }
 
 fn glob_match_impl(p: &str, t: &str) -> bool {
@@ -45,8 +42,7 @@ pub fn stack_filter_matches(pattern: &str, task_stack: Option<&str>) -> bool {
 
 /// Return the `stack_filter` from the active `stackydo.json`, if any.
 pub fn active_stack_filter() -> Option<String> {
-    crate::storage::paths::TodoPaths::resolved_config()
-        .and_then(|c| c.config.stack_filter.clone())
+    crate::storage::paths::TodoPaths::resolved_config().and_then(|c| c.config.stack_filter.clone())
 }
 
 /// Load the workflow config from the manifest, falling back to defaults.
@@ -93,6 +89,13 @@ pub fn parse_due_date(s: &str) -> Result<DateTime<Utc>> {
     )))
 }
 
+/// Return the short display ID for a task: short_id if available, else first 10 chars of ULID.
+pub fn display_id(fm: &TaskFrontmatter) -> &str {
+    fm.short_id
+        .as_deref()
+        .unwrap_or(&fm.id[..fm.id.len().min(10)])
+}
+
 /// Format a task as a single-line row for list/search output.
 pub fn format_task_row(fm: &TaskFrontmatter) -> String {
     let pri = fm
@@ -115,10 +118,11 @@ pub fn format_task_row(fm: &TaskFrontmatter) -> String {
         .map(|s| format!(" @{s}"))
         .unwrap_or_default();
 
+    let did = display_id(fm);
+
     format!(
-        "{status:<12} {id:.10}  {pri:<10} {title}{due}{tags}{stack}",
+        "{status:<12} {did:<10}  {pri:<10} {title}{due}{tags}{stack}",
         status = fm.status,
-        id = fm.id,
         pri = pri,
         title = fm.title,
     )
@@ -198,9 +202,7 @@ pub fn apply_filters(tasks: &mut Vec<Task>, f: &FilterParams) -> Result<()> {
 
     // Stage
     if let Some(stage_str) = f.stage {
-        let stage = stage_str
-            .parse::<Stage>()
-            .map_err(TodoError::Other)?;
+        let stage = stage_str.parse::<Stage>().map_err(TodoError::Other)?;
         tasks.retain(|t| workflow.stage_for(&t.frontmatter.status) == stage);
     }
 
@@ -217,9 +219,7 @@ pub fn apply_filters(tasks: &mut Vec<Task>, f: &FilterParams) -> Result<()> {
 
     // Priority
     if let Some(pri_str) = f.priority {
-        let pri = pri_str
-            .parse::<Priority>()
-            .map_err(TodoError::Other)?;
+        let pri = pri_str.parse::<Priority>().map_err(TodoError::Other)?;
         tasks.retain(|t| t.frontmatter.priority.as_ref() == Some(&pri));
     }
 
@@ -324,7 +324,11 @@ pub fn apply_pagination(tasks: &mut Vec<Task>, offset: usize, limit: usize) -> P
     if start > 0 {
         tasks.drain(..start);
     }
-    let effective_limit = if limit == usize::MAX { tasks.len() } else { limit };
+    let effective_limit = if limit == usize::MAX {
+        tasks.len()
+    } else {
+        limit
+    };
     tasks.truncate(effective_limit);
     PaginationInfo {
         total,

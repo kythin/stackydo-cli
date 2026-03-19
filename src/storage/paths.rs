@@ -115,14 +115,13 @@ impl TodoPaths {
 
     /// How the root was resolved: "env", "config", or "default".
     pub fn resolution_source() -> ResolutionSource {
-        RESOLVED
-            .get()
-            .map(|r| r.source.clone())
-            .unwrap_or(if std::env::var("STACKYDO_DIR").is_ok() {
+        RESOLVED.get().map(|r| r.source.clone()).unwrap_or(
+            if std::env::var("STACKYDO_DIR").is_ok() {
                 ResolutionSource::Env
             } else {
                 ResolutionSource::Default
-            })
+            },
+        )
     }
 
     /// The resolved config from init, if any.
@@ -191,7 +190,10 @@ mod tests {
         let cfg = resolved.config.unwrap();
         assert_eq!(cfg.config.dir.as_deref(), Some("./my-workspace"));
         assert_eq!(
-            cfg.config.context.as_ref().and_then(|c| c.project.as_deref()),
+            cfg.config
+                .context
+                .as_ref()
+                .and_then(|c| c.project.as_deref()),
             Some("test")
         );
 

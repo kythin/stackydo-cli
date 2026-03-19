@@ -1,5 +1,5 @@
 use crate::cli::args::DeleteArgs;
-use crate::commands::util::{active_workflow, matches_filters};
+use crate::commands::util::{active_workflow, display_id, matches_filters};
 use crate::error::{Result, TodoError};
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
@@ -32,7 +32,7 @@ pub fn execute(args: &DeleteArgs) -> Result<()> {
             eprint!(
                 "Delete '{}' ({})? [y/N] ",
                 task.frontmatter.title,
-                &task.frontmatter.id[..10]
+                display_id(&task.frontmatter)
             );
             let mut input = String::new();
             std::io::stdin().read_line(&mut input)?;
@@ -45,14 +45,18 @@ pub fn execute(args: &DeleteArgs) -> Result<()> {
         // Clear parent's subtask reference if this task has a parent
         if let Some(ref parent_id) = task.frontmatter.parent_id {
             if let Ok(mut parent) = store.load(parent_id) {
-                parent.frontmatter.subtask_ids.retain(|s| s != &task.frontmatter.id);
+                parent
+                    .frontmatter
+                    .subtask_ids
+                    .retain(|s| s != &task.frontmatter.id);
                 parent.frontmatter.modified = chrono::Utc::now();
                 let _ = store.save(&parent);
             }
         }
 
+        let did = display_id(&task.frontmatter).to_string();
         store.delete(&task.frontmatter.id)?;
-        println!("Deleted: {}", &task.frontmatter.id[..10]);
+        println!("Deleted: {did}");
         let remaining = store.load_all()?;
         manifest_store.prune_stacks_and_tags(&remaining)?;
         return Ok(());
@@ -94,7 +98,7 @@ pub fn execute(args: &DeleteArgs) -> Result<()> {
             store.delete(&task.frontmatter.id)?;
             println!(
                 "  Deleted: {} — {}",
-                &task.frontmatter.id[..10],
+                display_id(&task.frontmatter),
                 task.frontmatter.title
             );
             count += 1;

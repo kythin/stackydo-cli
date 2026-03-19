@@ -56,10 +56,9 @@ pub fn execute(args: &ContextArgs) -> Result<()> {
     let env = collect_env_vars();
 
     let source = TodoPaths::resolution_source();
-    let config_dir_field = TodoPaths::resolved_config()
-        .and_then(|c| c.config.dir.clone());
-    let config_stack_filter = TodoPaths::resolved_config()
-        .and_then(|c| c.config.stack_filter.clone());
+    let config_dir_field = TodoPaths::resolved_config().and_then(|c| c.config.dir.clone());
+    let config_stack_filter =
+        TodoPaths::resolved_config().and_then(|c| c.config.stack_filter.clone());
 
     if args.json {
         let output = ContextOutput {
@@ -101,9 +100,13 @@ pub fn execute(args: &ContextArgs) -> Result<()> {
     }
 
     println!();
-    println!("  Config file:     {}", result.config_file_path
-        .as_deref()
-        .unwrap_or("(no stackydo.json found)"));
+    println!(
+        "  Config file:     {}",
+        result
+            .config_file_path
+            .as_deref()
+            .unwrap_or("(no stackydo.json found)")
+    );
 
     if let Some(ref content) = ctx.todo_context_content {
         println!("  Config content:");

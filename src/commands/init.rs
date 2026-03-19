@@ -97,9 +97,7 @@ pub fn execute(args: &InitArgs) -> Result<()> {
             if let Some(workdir) = parent_repo.workdir() {
                 // Resolve absolute paths; use cwd.join(root) as fallback for
                 // relative paths before the dir existed.
-                let abs_root = root
-                    .canonicalize()
-                    .unwrap_or_else(|_| cwd.join(&root));
+                let abs_root = root.canonicalize().unwrap_or_else(|_| cwd.join(&root));
                 let abs_workdir = workdir
                     .canonicalize()
                     .unwrap_or_else(|_| workdir.to_path_buf());
@@ -140,10 +138,7 @@ pub fn execute(args: &InitArgs) -> Result<()> {
                             .append(true)
                             .open(&parent_gitignore)?
                             .write_all(line.as_bytes())?;
-                        created.push(format!(
-                            "Added '{entry}' to {}",
-                            parent_gitignore.display()
-                        ));
+                        created.push(format!("Added '{entry}' to {}", parent_gitignore.display()));
                     }
                 }
             }
@@ -158,8 +153,7 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         if cwd_config_path.exists() {
             // Parse existing file, update/add the dir field, and re-write
             let existing = fs::read_to_string(&cwd_config_path)?;
-            let mut config: StackydoConfig =
-                serde_json::from_str(&existing).unwrap_or_default();
+            let mut config: StackydoConfig = serde_json::from_str(&existing).unwrap_or_default();
             config.dir = Some(dir_value.to_string());
             let new_content = serde_json::to_string_pretty(&config)
                 .unwrap_or_else(|_| format!("{{\"dir\": \"{dir_value}\"}}\n"));
@@ -241,8 +235,8 @@ pub fn execute(args: &InitArgs) -> Result<()> {
 
         let (mut doc, existed) = if mcp_path.exists() {
             let text = fs::read_to_string(&mcp_path)?;
-            let val = serde_json::from_str::<serde_json::Value>(&text)
-                .unwrap_or(serde_json::json!({}));
+            let val =
+                serde_json::from_str::<serde_json::Value>(&text).unwrap_or(serde_json::json!({}));
             (val, true)
         } else {
             (serde_json::json!({}), false)
@@ -291,7 +285,10 @@ pub fn execute(args: &InitArgs) -> Result<()> {
             "  1. Run `stackydo init --here --dir {}` to write a stackydo.json",
             root.display()
         );
-        println!("  2. export STACKYDO_DIR=\"{}\"  (per-session override)", root.display());
+        println!(
+            "  2. export STACKYDO_DIR=\"{}\"  (per-session override)",
+            root.display()
+        );
     }
 
     // Suggest submodule approach only when --git wasn't used.

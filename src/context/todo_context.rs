@@ -44,8 +44,7 @@ pub fn discover_config(start_dir: &Path) -> Option<ResolvedConfig> {
     let ctx_file = discover(start_dir)?;
     let file_path = Path::new(&ctx_file.path).to_path_buf();
 
-    let config = serde_json::from_str::<StackydoConfig>(&ctx_file.content)
-        .unwrap_or_default();
+    let config = serde_json::from_str::<StackydoConfig>(&ctx_file.content).unwrap_or_default();
 
     Some(ResolvedConfig {
         config,

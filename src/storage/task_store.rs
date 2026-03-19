@@ -120,8 +120,7 @@ fn parse_task(content: &str) -> Result<Task> {
         String::new()
     };
 
-    let frontmatter: TaskFrontmatter =
-        serde_yaml::from_str(yaml_str).map_err(TodoError::Yaml)?;
+    let frontmatter: TaskFrontmatter = serde_yaml::from_str(yaml_str).map_err(TodoError::Yaml)?;
 
     Ok(Task { frontmatter, body })
 }
@@ -232,7 +231,11 @@ With multiple paragraphs.
         store.save(&valid2).expect("save valid2");
 
         let tasks = store.load_all().expect("load_all should succeed");
-        assert_eq!(tasks.len(), 2, "should load 2 valid tasks, skipping corrupt");
+        assert_eq!(
+            tasks.len(),
+            2,
+            "should load 2 valid tasks, skipping corrupt"
+        );
     }
 
     // ── Roundtrip with rich fields ──
@@ -308,13 +311,11 @@ mod proptest_tests {
 
     fn arb_datetime() -> impl Strategy<Value = DateTime<Utc>> {
         // Dates between 2020 and 2030
-        (2020i32..2030, 1u32..13, 1u32..29, 0u32..24, 0u32..60).prop_map(
-            |(y, m, d, h, min)| {
-                Utc.with_ymd_and_hms(y, m, d, h, min, 0)
-                    .single()
-                    .unwrap_or_else(Utc::now)
-            },
-        )
+        (2020i32..2030, 1u32..13, 1u32..29, 0u32..24, 0u32..60).prop_map(|(y, m, d, h, min)| {
+            Utc.with_ymd_and_hms(y, m, d, h, min, 0)
+                .single()
+                .unwrap_or_else(Utc::now)
+        })
     }
 
     fn arb_tag() -> impl Strategy<Value = String> {
@@ -337,6 +338,7 @@ mod proptest_tests {
             let task = Task {
                 frontmatter: TaskFrontmatter {
                     id: id.clone(),
+                    short_id: None,
                     title: title.clone(),
                     status: status.clone(),
                     priority: priority.clone(),

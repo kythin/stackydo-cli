@@ -1,5 +1,5 @@
 use crate::cli::args::CompleteArgs;
-use crate::commands::util::{active_workflow, matches_filters};
+use crate::commands::util::{active_workflow, display_id, matches_filters};
 use crate::error::{Result, TodoError};
 use crate::storage::task_store::TaskStore;
 use chrono::Utc;
@@ -15,7 +15,7 @@ pub fn execute(args: &CompleteArgs) -> Result<()> {
         store.save(&task)?;
         println!(
             "Completed: {} — {}",
-            &task.frontmatter.id[..10],
+            display_id(&task.frontmatter),
             task.frontmatter.title
         );
         return Ok(());
@@ -59,7 +59,7 @@ pub fn execute(args: &CompleteArgs) -> Result<()> {
             store.save(&task)?;
             println!(
                 "  Completed: {} — {}",
-                &task.frontmatter.id[..10],
+                display_id(&task.frontmatter),
                 task.frontmatter.title
             );
             count += 1;

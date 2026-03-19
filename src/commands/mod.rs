@@ -1,6 +1,5 @@
 pub mod body_edit;
 pub mod complete;
-pub mod mcp_setup;
 pub mod context;
 pub mod create;
 pub mod delete;
@@ -8,6 +7,7 @@ pub mod import;
 pub mod init;
 pub mod list;
 pub mod list_workspaces;
+pub mod mcp_setup;
 pub mod migrate;
 pub mod search;
 pub mod show;

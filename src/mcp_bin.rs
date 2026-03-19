@@ -1,9 +1,12 @@
 use clap::Parser;
-use rmcp::{ServiceExt, transport::io::stdio};
+use rmcp::{transport::io::stdio, ServiceExt};
 
 #[derive(Parser)]
 #[command(name = "stackydo-mcp")]
-#[command(version, about = "MCP server for stackydo — stdio transport for use with Claude and other MCP clients")]
+#[command(
+    version,
+    about = "MCP server for stackydo — stdio transport for use with Claude and other MCP clients"
+)]
 struct Args {}
 
 #[tokio::main]

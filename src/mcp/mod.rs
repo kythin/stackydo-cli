@@ -3,12 +3,11 @@ pub(crate) mod resources;
 pub(crate) mod tools;
 
 use rmcp::{
-    ErrorData as McpError, RoleServer, ServerHandler,
     handler::server::router::{prompt::PromptRouter, tool::ToolRouter},
     model::*,
     prompt_handler,
     service::RequestContext,
-    tool_handler,
+    tool_handler, ErrorData as McpError, RoleServer, ServerHandler,
 };
 
 #[derive(Debug, Clone)]

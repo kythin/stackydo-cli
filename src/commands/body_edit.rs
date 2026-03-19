@@ -25,7 +25,11 @@ pub fn parse_sed_expression(expr: &str) -> Result<(Regex, String, bool)> {
 
     let pattern = &parts[0];
     let replacement = &parts[1];
-    let flags = if parts.len() > 2 { parts[2].as_str() } else { "" };
+    let flags = if parts.len() > 2 {
+        parts[2].as_str()
+    } else {
+        ""
+    };
     let global = flags.contains('g');
 
     let regex = Regex::new(pattern).map_err(TodoError::Regex)?;
@@ -172,7 +176,10 @@ mod tests {
         // but our parser treats `\/` as an escaped delimiter, so the
         // expression is mis-parsed. This documents the known limitation.
         let result = parse_sed_expression("s/a\\\\/b/");
-        assert!(result.is_err(), "known limitation: literal backslash before delimiter mis-parses");
+        assert!(
+            result.is_err(),
+            "known limitation: literal backslash before delimiter mis-parses"
+        );
     }
 
     #[test]

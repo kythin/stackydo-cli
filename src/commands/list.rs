@@ -109,7 +109,8 @@ pub fn execute(args: &ListArgs) -> Result<()> {
             let json_tasks: Vec<TaskJson> = tasks.iter().map(TaskJson::from).collect();
             return print_json_array(&json_tasks);
         } else {
-            let json_tasks: Vec<TaskSummaryJson> = tasks.iter().map(TaskSummaryJson::from).collect();
+            let json_tasks: Vec<TaskSummaryJson> =
+                tasks.iter().map(TaskSummaryJson::from).collect();
             return print_json_array(&json_tasks);
         }
     }

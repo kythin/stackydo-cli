@@ -20,6 +20,10 @@ pub struct ManifestSettings {
     pub quick_list_limit: usize,
 }
 
+fn default_next_short_id() -> u64 {
+    1
+}
+
 fn default_true() -> bool {
     true
 }
@@ -56,6 +60,10 @@ pub struct Manifest {
     /// Stage/status workflow configuration
     #[serde(default)]
     pub workflow: WorkflowConfig,
+
+    /// Next short ID counter (monotonically increasing, never recycled)
+    #[serde(default = "default_next_short_id")]
+    pub next_short_id: u64,
 }
 
 impl Default for Manifest {
@@ -67,6 +75,7 @@ impl Default for Manifest {
             features: HashMap::new(),
             settings: ManifestSettings::default(),
             workflow: WorkflowConfig::default(),
+            next_short_id: 1,
         }
     }
 }

@@ -29,9 +29,7 @@ impl std::str::FromStr for Stage {
             "backlog" => Ok(Self::Backlog),
             "active" => Ok(Self::Active),
             "archive" => Ok(Self::Archive),
-            _ => Err(format!(
-                "Invalid stage: {s}. Use: backlog, active, archive"
-            )),
+            _ => Err(format!("Invalid stage: {s}. Use: backlog, active, archive")),
         }
     }
 }
@@ -71,8 +69,15 @@ impl Default for WorkflowConfig {
 impl WorkflowConfig {
     /// Look up the stage for a status string, falling back to Backlog for unknowns.
     pub fn stage_for(&self, status: &str) -> Stage {
-        let canonical = self.aliases.get(status).map(|s| s.as_str()).unwrap_or(status);
-        self.statuses.get(canonical).copied().unwrap_or(Stage::Backlog)
+        let canonical = self
+            .aliases
+            .get(status)
+            .map(|s| s.as_str())
+            .unwrap_or(status);
+        self.statuses
+            .get(canonical)
+            .copied()
+            .unwrap_or(Stage::Backlog)
     }
 
     /// Resolve aliases and validate a status string. Returns the canonical status.
@@ -80,7 +85,9 @@ impl WorkflowConfig {
     pub fn validate_status(&self, input: &str) -> std::result::Result<String, String> {
         let lower = input.to_lowercase();
         if lower == "deleted" {
-            return Err("Cannot set status to 'deleted'. Use the delete command to remove tasks.".into());
+            return Err(
+                "Cannot set status to 'deleted'. Use the delete command to remove tasks.".into(),
+            );
         }
         // Check alias first
         if let Some(canonical) = self.aliases.get(&lower) {
@@ -92,7 +99,9 @@ impl WorkflowConfig {
         if self.statuses.contains_key(&lower) {
             return Ok(lower);
         }
-        let known: Vec<&str> = self.statuses.keys()
+        let known: Vec<&str> = self
+            .statuses
+            .keys()
             .filter(|s| s.as_str() != "deleted")
             .map(|s| s.as_str())
             .collect();
@@ -146,7 +155,9 @@ impl std::str::FromStr for Priority {
             "high" => Ok(Self::High),
             "medium" => Ok(Self::Medium),
             "low" => Ok(Self::Low),
-            _ => Err(format!("Invalid priority: {s}. Use: critical, high, medium, low")),
+            _ => Err(format!(
+                "Invalid priority: {s}. Use: critical, high, medium, low"
+            )),
         }
     }
 }
@@ -215,6 +226,10 @@ pub struct ContextInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskFrontmatter {
     pub id: String,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_id: Option<String>,
+
     pub title: String,
     pub status: String,
 
@@ -377,7 +392,10 @@ mod workflow_tests {
     fn validate_status_rejects_deleted() {
         let wf = WorkflowConfig::default();
         let err = wf.validate_status("deleted").unwrap_err();
-        assert!(err.contains("delete command"), "error should mention delete command: {err}");
+        assert!(
+            err.contains("delete command"),
+            "error should mention delete command: {err}"
+        );
         // Also rejects case variants
         assert!(wf.validate_status("DELETED").is_err());
     }
@@ -423,6 +441,7 @@ impl Task {
         Self {
             frontmatter: TaskFrontmatter {
                 id,
+                short_id: None,
                 title,
                 status: "todo".to_string(),
                 priority: None,

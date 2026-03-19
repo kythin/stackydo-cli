@@ -135,7 +135,10 @@ pub fn resolve_task_pub(store: &TaskStore, id_or_prefix: &str) -> crate::error::
 
     match prefix_matches.len() {
         0 => Err(crate::error::TodoError::TaskNotFound(id_or_prefix.into())),
-        1 => Ok(prefix_matches.into_iter().next().expect("len confirmed 1 item")),
+        1 => Ok(prefix_matches
+            .into_iter()
+            .next()
+            .expect("len confirmed 1 item")),
         n => Err(crate::error::TodoError::Other(format!(
             "Ambiguous ID prefix '{id_or_prefix}': matches {n} tasks. Be more specific."
         ))),

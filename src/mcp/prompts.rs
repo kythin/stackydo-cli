@@ -102,12 +102,19 @@ fn load_stacks_and_tags_summary() -> String {
         if stacks.is_empty() {
             "(none)".to_string()
         } else {
-            stacks.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            stacks
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         },
         if tags.is_empty() {
             "(none)".to_string()
         } else {
-            tags.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            tags.iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         }
     )
 }
@@ -141,17 +148,15 @@ impl StackydoMcp {
 
         GetPromptResult {
             description: Some("Triage open tasks".to_string()),
-            messages: vec![
-                PromptMessage::new_text(
-                    PromptMessageRole::User,
-                    format!(
-                        "Review my open tasks and help me triage them. Suggest priority changes, \
+            messages: vec![PromptMessage::new_text(
+                PromptMessageRole::User,
+                format!(
+                    "Review my open tasks and help me triage them. Suggest priority changes, \
                          status updates, and flag anything overdue or stale.\n\n\
                          ## Current Stats\n{stats}\n\n\
                          ## Open Tasks\n```json\n{open_tasks}\n```"
-                    ),
                 ),
-            ],
+            )],
         }
     }
 
@@ -192,20 +197,18 @@ impl StackydoMcp {
 
         GetPromptResult {
             description: Some("Daily standup summary".to_string()),
-            messages: vec![
-                PromptMessage::new_text(
-                    PromptMessageRole::User,
-                    format!(
-                        "Give me a daily standup summary based on my tasks. Cover:\n\
+            messages: vec![PromptMessage::new_text(
+                PromptMessageRole::User,
+                format!(
+                    "Give me a daily standup summary based on my tasks. Cover:\n\
                          - What's been completed recently\n\
                          - What's currently in progress\n\
                          - What's blocked and why\n\
                          - What should I focus on today\n\n\
                          ## Stats\n{stats}\n\n\
                          ## Recently Modified Tasks\n```json\n{recent}\n```"
-                    ),
                 ),
-            ],
+            )],
         }
     }
 

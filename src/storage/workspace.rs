@@ -156,9 +156,7 @@ fn scan_directory(
             Ok(e) => e,
             Err(_) => continue, // permission errors, etc.
         };
-        if entry.file_type().is_file()
-            && entry.file_name().to_str() == Some("stackydo.json")
-        {
+        if entry.file_type().is_file() && entry.file_name().to_str() == Some("stackydo.json") {
             if let Some(info) = workspace_from_config(entry.path()) {
                 if let Some(canonical) = canonicalize_safe(&info.store_dir) {
                     if seen.insert(canonical) {
@@ -192,10 +190,7 @@ fn workspace_from_config(config_path: &Path) -> Option<WorkspaceInfo> {
         return None;
     }
 
-    let project_name = config
-        .context
-        .as_ref()
-        .and_then(|c| c.project.clone());
+    let project_name = config.context.as_ref().and_then(|c| c.project.clone());
 
     let mut info = load_workspace_info(Some(config_path.to_path_buf()), store_dir, false);
     info.project_name = project_name;
@@ -267,12 +262,7 @@ pub fn resolve_workspace_path(input: &str) -> std::result::Result<PathBuf, Strin
     let path = PathBuf::from(shellexpand(input));
 
     // If it's a file named stackydo.json
-    if path.is_file()
-        && path
-            .file_name()
-            .and_then(|f| f.to_str())
-            == Some("stackydo.json")
-    {
+    if path.is_file() && path.file_name().and_then(|f| f.to_str()) == Some("stackydo.json") {
         let content = std::fs::read_to_string(&path)
             .map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
         let config: StackydoConfig = serde_json::from_str(&content)
@@ -396,6 +386,9 @@ mod tests {
         let config = r#"{"context": {"project": "test"}}"#;
         fs::write(tmp.path().join("stackydo.json"), config).unwrap();
         let result = workspace_from_config(&tmp.path().join("stackydo.json"));
-        assert!(result.is_none(), "Config without dir field should return None");
+        assert!(
+            result.is_none(),
+            "Config without dir field should return None"
+        );
     }
 }

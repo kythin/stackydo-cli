@@ -49,10 +49,7 @@ pub fn execute(args: &ListWorkspacesArgs) -> Result<()> {
         };
 
         if ws.is_default || ws.config_path.is_none() {
-            println!(
-                "  tasks: {}{}",
-                ws.task_count, stacks_str
-            );
+            println!("  tasks: {}{}", ws.task_count, stacks_str);
         } else {
             println!(
                 "  store: {}/  tasks: {}{}",

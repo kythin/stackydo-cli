@@ -1,5 +1,7 @@
 use crate::cli::args::StatsArgs;
-use crate::commands::util::{active_stack_filter, active_workflow, print_json, stack_filter_matches};
+use crate::commands::util::{
+    active_stack_filter, active_workflow, print_json, stack_filter_matches,
+};
 use crate::error::Result;
 use crate::storage::task_store::TaskStore;
 use chrono::Utc;
@@ -61,17 +63,12 @@ pub fn execute(args: &StatsArgs) -> Result<()> {
             .stack
             .clone()
             .unwrap_or_else(|| "(no stack)".to_string());
-        let stack_entry = by_stack
-            .entry(stack_name)
-            .or_insert_with(|| StackStats {
-                total: 0,
-                by_status: BTreeMap::new(),
-            });
+        let stack_entry = by_stack.entry(stack_name).or_insert_with(|| StackStats {
+            total: 0,
+            by_status: BTreeMap::new(),
+        });
         stack_entry.total += 1;
-        *stack_entry
-            .by_status
-            .entry(status_str)
-            .or_default() += 1;
+        *stack_entry.by_status.entry(status_str).or_default() += 1;
 
         // Tags
         for tag in &task.frontmatter.tags {
