@@ -117,7 +117,7 @@ pub struct CreateArgs {
 
 #[derive(Parser)]
 pub struct UpdateArgs {
-    /// Task ID (ULID) or unique prefix
+    /// Task ID (ULID, short ID like SD1, or unique prefix)
     pub id: String,
 
     /// New title
@@ -254,7 +254,7 @@ pub struct ListArgs {
 
 #[derive(Parser)]
 pub struct ShowArgs {
-    /// Task ID (ULID) or unique prefix
+    /// Task ID (ULID, short ID like SD1, or unique prefix)
     pub id: String,
 
     /// Output as JSON
@@ -264,7 +264,7 @@ pub struct ShowArgs {
 
 #[derive(Parser)]
 pub struct CompleteArgs {
-    /// Task ID (ULID) or unique prefix (omit for bulk mode)
+    /// Task ID (ULID, short ID like SD1, or unique prefix) (omit for bulk mode)
     pub id: Option<String>,
 
     /// Bulk: filter by status
@@ -286,7 +286,7 @@ pub struct CompleteArgs {
 
 #[derive(Parser)]
 pub struct DeleteArgs {
-    /// Task ID (ULID) or unique prefix (omit for bulk mode)
+    /// Task ID (ULID, short ID like SD1, or unique prefix) (omit for bulk mode)
     pub id: Option<String>,
 
     /// Skip confirmation

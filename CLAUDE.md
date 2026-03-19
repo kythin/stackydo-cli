@@ -38,7 +38,7 @@ The smoke test sets `STACKYDO_DIR=tests/.test-data/` so it never touches `~/.sta
 - **`src/storage/`** — Filesystem persistence: markdown+YAML task files (`TaskStore`), JSON manifest (`ManifestStore`), path resolution (`TodoPaths`)
 - **`src/context/`** — Auto-capture: git info via git2 (`git_context`), `.stackydo-context` file discovery (`dir_context`), combined capture (`todo_context`)
 - **`src/cli/`** — clap derive argument definitions (`args.rs`)
-- **`src/commands/`** — Headless command implementations: create, list, show, update, complete, delete, search, context, stats, stacks, init, import
+- **`src/commands/`** — Headless command implementations: create, list, show, update, complete, delete, search, context, stats, stacks, init, import, body_edit (sed parser), migrate
 - **`src/tui/`** — ratatui TUI: app state (`app.rs`), 40/60 split layout (`ui.rs`), keybinding handler (`handler.rs`), widgets (`widgets/`)
 - **`src/mcp/`** — MCP server: tool definitions (`tools.rs`), prompt templates (`prompts.rs`), resource definitions (`resources.rs`)
 - **`src/error.rs`** — `TodoError` enum using thiserror
@@ -47,7 +47,8 @@ The smoke test sets `STACKYDO_DIR=tests/.test-data/` so it never touches `~/.sta
 
 - Tasks are flat files: `<STACKYDO_DIR>/<ULID>.md` — no database
 - `$STACKYDO_DIR` env var overrides the default `~/.stackydo/` storage root; all path resolution goes through `TodoPaths::root()`
-- ULIDs for IDs (time-sortable, unique)
+- ULIDs for IDs (time-sortable, unique); files named `<ULID>.md`
+- **Short IDs**: Tasks get a human-friendly `short_id` (SD1, SD2, …) stored in frontmatter. Counter tracked in `manifest.next_short_id`, per-workspace, never recycled. All commands accept short IDs, ULIDs, or ULID prefixes. `display_id()` helper in `util.rs` shows short_id when available, falls back to truncated ULID
 - All dates stored as UTC, displayed in local timezone
 - YAML frontmatter is managed by the tool; body content is freeform markdown
 - `.stackydo-context` files discovered by walking up from CWD, fallback `~/.stackydo-context`
@@ -56,7 +57,8 @@ The smoke test sets `STACKYDO_DIR=tests/.test-data/` so it never touches `~/.sta
 - **Stacks**: each task has an optional `stack: Option<String>` field (one stack per task); manifest tracks known stack names
 - **Stage/Status workflow**: `TaskFrontmatter.status` is a `String` (not an enum). `Stage` is a fixed enum (Backlog, Active, Archive) computed from status via `WorkflowConfig`. Default statuses: todo/on_hold (Backlog), in_progress/blocked/in_review (Active), done/cancelled (Archive). Archive-stage tasks are hidden from list/search by default. Delete is always a file operation — no soft-delete. `WorkflowConfig` stored in manifest with `#[serde(default)]` for backward compat.
 - Storage layer uses concrete types (not trait objects) — `TaskStore`, `ManifestStore`
-- Task ID resolution supports prefix matching (e.g. `stackydo show 01HQ` matches the full ULID)
+- Task ID resolution: exact ULID → exact short_id (SD42) → ULID prefix match. Duplicate short_ids produce an explicit error
+- **Body editing**: `update` supports `--body-replace`, `--body-sub` (sed-style `s/pat/repl/[g]`), and `--dry-run`. Operation order: replace → sub → append → note. `body_edit.rs` has the sed parser
 
 ## TUI Modes
 

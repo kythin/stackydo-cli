@@ -68,7 +68,7 @@ pub struct ListTasksParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct GetTaskParams {
-    /// Task ID or unique prefix
+    /// Task ID (ULID, short ID like SD1, or unique prefix)
     pub id: String,
 }
 
@@ -95,7 +95,7 @@ pub struct CreateTaskParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct UpdateTaskParams {
-    /// Task ID or unique prefix
+    /// Task ID (ULID, short ID like SD1, or unique prefix)
     pub id: String,
     /// New title
     #[schemars(default)]
@@ -134,13 +134,13 @@ pub struct UpdateTaskParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct CompleteTaskParams {
-    /// Task ID or unique prefix
+    /// Task ID (ULID, short ID like SD1, or unique prefix)
     pub id: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct DeleteTaskParams {
-    /// Task ID or unique prefix
+    /// Task ID (ULID, short ID like SD1, or unique prefix)
     pub id: String,
 }
 
