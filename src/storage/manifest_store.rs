@@ -64,6 +64,37 @@ impl ManifestStore {
         self.save(&manifest)
     }
 
+    /// Allocate the next short ID (e.g. "SD1", "SD2"). Increments the counter
+    /// and persists to disk. IDs are never recycled.
+    ///
+    /// Uses an exclusive file lock to prevent concurrent creates from
+    /// allocating the same counter value.
+    pub fn allocate_short_id(&self) -> Result<String> {
+        use fs2::FileExt;
+
+        // Ensure parent directory exists
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        // Lock a sibling file to serialize access to the counter
+        let lock_path = self.path.with_extension("json.lock");
+        let lock_file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&lock_path)?;
+        lock_file.lock_exclusive()?;
+
+        let mut manifest = self.load()?;
+        let n = manifest.next_short_id;
+        manifest.next_short_id = n + 1;
+        self.save(&manifest)?;
+
+        // Lock released when lock_file is dropped
+        Ok(format!("SD{n}"))
+    }
+
     /// Remove stacks and tags from the manifest that are no longer referenced
     /// by any of the given tasks. Call after deleting one or more tasks.
     pub fn prune_stacks_and_tags(&self, remaining_tasks: &[Task]) -> Result<()> {
@@ -100,7 +131,9 @@ mod tests {
 
         let tags = vec!["backend".to_string(), "frontend".to_string()];
         store.register_tags(&tags).expect("first register");
-        store.register_tags(&tags).expect("second register (idempotent)");
+        store
+            .register_tags(&tags)
+            .expect("second register (idempotent)");
 
         let manifest = store.load().expect("load");
         assert_eq!(manifest.tags.len(), 2);
@@ -114,7 +147,9 @@ mod tests {
         let store = ManifestStore::with_path(dir.path().join("manifest.json"));
 
         store.register_stack("work").expect("first register");
-        store.register_stack("work").expect("second register (idempotent)");
+        store
+            .register_stack("work")
+            .expect("second register (idempotent)");
         store.register_stack("personal").expect("third register");
 
         let manifest = store.load().expect("load");
