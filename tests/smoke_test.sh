@@ -832,6 +832,101 @@ STATS_JSON2=$($TODO_BIN stats --json 2>&1)
 assert_contains "$STATS_JSON2" '"by_stage"' "stats --json: includes by_stage breakdown"
 
 # ════════════════════════════════════════════════════════════════════════
+# SCENARIO 26: Short ID resolution
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 26: Short ID resolution"
+
+# Create a task, extract ULID
+ID_SHORT=$($TODO_BIN create --title "Short ID test task" 2>&1)
+
+# Show should display a Short ID field
+OUT_SHORT=$($TODO_BIN show "$ID_SHORT" 2>&1)
+assert_contains "$OUT_SHORT" "Short ID:" "show: displays short ID"
+
+# Extract the short ID (e.g. "SD42") from the show output
+SID=$(echo "$OUT_SHORT" | grep "Short ID:" | awk '{print $3}')
+
+# Resolve by short ID
+OUT_SID=$($TODO_BIN show "$SID" 2>&1)
+assert_contains "$OUT_SID" "Short ID test task" "show: resolves by short ID"
+
+# Update by short ID
+$TODO_BIN update "$SID" --status in_progress >/dev/null 2>&1
+OUT_UPDATED=$($TODO_BIN show "$SID" 2>&1)
+assert_contains "$OUT_UPDATED" "in_progress" "update: works with short ID"
+
+# Complete by short ID
+$TODO_BIN complete "$SID" >/dev/null 2>&1
+OUT_COMPLETED=$($TODO_BIN show "$SID" 2>&1)
+assert_contains "$OUT_COMPLETED" "done" "complete: works with short ID"
+
+# List output should show short IDs instead of truncated ULIDs
+ID_LIST_TEST=$($TODO_BIN create --title "List display test" 2>&1)
+OUT_LIST=$($TODO_BIN list --status todo 2>&1)
+# Short IDs should appear in list output (SD prefix)
+assert_contains "$OUT_LIST" "SD" "list: shows short IDs"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 27: Body editing (--body-replace, --body-sub)
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 27: Body editing (--body-replace, --body-sub)"
+
+# Create task with initial body
+ID_BODY=$($TODO_BIN create --title "Body editing test" -- original body content 2>&1)
+
+# --body-replace: full replacement
+$TODO_BIN update "$ID_BODY" --body-replace "completely new body" >/dev/null 2>&1
+OUT_REPLACED=$($TODO_BIN show "$ID_BODY" 2>&1)
+assert_contains "$OUT_REPLACED" "completely new body" "body-replace: content replaced"
+assert_not_contains "$OUT_REPLACED" "original body" "body-replace: old content gone"
+
+# --body-replace "": clear body
+$TODO_BIN update "$ID_BODY" --body-replace "" >/dev/null 2>&1
+OUT_CLEARED=$($TODO_BIN show "$ID_BODY" 2>&1)
+assert_not_contains "$OUT_CLEARED" "--- Body ---" "body-replace empty: body section gone"
+
+# Setup for substitution
+$TODO_BIN update "$ID_BODY" --body-replace "hello world hello" >/dev/null 2>&1
+
+# --body-sub: single replacement
+$TODO_BIN update "$ID_BODY" --body-sub "s/hello/goodbye/" >/dev/null 2>&1
+OUT_SUB=$($TODO_BIN show "$ID_BODY" 2>&1)
+assert_contains "$OUT_SUB" "goodbye world hello" "body-sub: first occurrence replaced"
+
+# --body-sub: global replacement
+$TODO_BIN update "$ID_BODY" --body-replace "hello world hello" >/dev/null 2>&1
+$TODO_BIN update "$ID_BODY" --body-sub "s/hello/goodbye/g" >/dev/null 2>&1
+OUT_SUBG=$($TODO_BIN show "$ID_BODY" 2>&1)
+assert_contains "$OUT_SUBG" "goodbye world goodbye" "body-sub global: all occurrences replaced"
+
+# Combined: replace then append
+$TODO_BIN update "$ID_BODY" --body-replace "base content" -- appended text >/dev/null 2>&1
+OUT_COMBO=$($TODO_BIN show "$ID_BODY" 2>&1)
+assert_contains "$OUT_COMBO" "base content" "combined: replace applied"
+assert_contains "$OUT_COMBO" "appended text" "combined: append applied"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 28: Dry-run preview
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 28: Dry-run preview"
+
+# Create task with body
+ID_DRY=$($TODO_BIN create --title "Dry run test" -- original dry body 2>&1)
+
+# --dry-run with --body-replace: should show preview, NOT save
+DRY_OUT=$($TODO_BIN update "$ID_DRY" --body-replace "preview content" --dry-run 2>&1)
+assert_contains "$DRY_OUT" "Body preview (not saved)" "dry-run: shows preview header"
+assert_contains "$DRY_OUT" "preview content" "dry-run: shows new body"
+
+# Verify original body unchanged
+AFTER_DRY=$($TODO_BIN show "$ID_DRY" 2>&1)
+assert_contains "$AFTER_DRY" "original dry body" "dry-run: original body unchanged"
+
+# --dry-run without body op should error
+DRY_ERR=$($TODO_BIN update "$ID_DRY" --title "new title" --dry-run 2>&1) || true
+assert_contains "$DRY_ERR" "requires a body operation" "dry-run: errors without body op"
+
+# ════════════════════════════════════════════════════════════════════════
 # Summary
 # ════════════════════════════════════════════════════════════════════════
 
