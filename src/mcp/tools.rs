@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::commands::show::resolve_task_pub;
 use crate::commands::util::{
-    active_workflow, apply_filters, apply_pagination, apply_sort, effective_limit, parse_due_date,
-    FilterParams,
+    active_workflow, apply_filters, apply_pagination, apply_sort, display_id, effective_limit,
+    parse_due_date, FilterParams,
 };
 use crate::context::dir_context;
 use crate::model::task::{Priority, Task, TaskJson, TaskSummaryJson};
@@ -345,6 +345,11 @@ impl StackydoMcp {
         let mut task = Task::new(id.clone(), title, cwd);
         task.frontmatter.context = ctx;
 
+        // Assign short ID
+        if let Ok(sid) = manifest_store.allocate_short_id() {
+            task.frontmatter.short_id = Some(sid);
+        }
+
         if let Some(body) = params.body {
             // Convert literal \n escape sequences from MCP JSON to real newlines
             task.body = body.replace("\\n", "\n");
@@ -383,7 +388,13 @@ impl StackydoMcp {
         }
 
         match store.save(&task) {
-            Ok(()) => id,
+            Ok(()) => {
+                let result = serde_json::json!({
+                    "id": id,
+                    "short_id": task.frontmatter.short_id,
+                });
+                serde_json::to_string(&result).unwrap_or(id)
+            }
             Err(e) => err_to_string(e),
         }
     }
@@ -567,7 +578,7 @@ impl StackydoMcp {
         match store.save(&task) {
             Ok(()) => format!(
                 "Completed: {} — {}",
-                &task.frontmatter.id[..10],
+                display_id(&task.frontmatter),
                 task.frontmatter.title
             ),
             Err(e) => err_to_string(e),
@@ -589,6 +600,7 @@ impl StackydoMcp {
 
         let task_id = task.frontmatter.id.clone();
         let title = task.frontmatter.title.clone();
+        let did = display_id(&task.frontmatter).to_string();
 
         // Clear parent's subtask reference
         if let Some(ref parent_id) = task.frontmatter.parent_id {
@@ -604,7 +616,7 @@ impl StackydoMcp {
                 if let Ok(remaining) = store.load_all() {
                     let _ = manifest_store.prune_stacks_and_tags(&remaining);
                 }
-                format!("Deleted: {} — {}", &task_id[..10], title)
+                format!("Deleted: {did} — {title}")
             }
             Err(e) => err_to_string(e),
         }
