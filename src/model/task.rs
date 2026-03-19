@@ -233,22 +233,22 @@ pub struct TaskFrontmatter {
     pub title: String,
     pub status: String,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stack: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due: Option<DateTime<Utc>>,
 
     pub created: DateTime<Utc>,
     pub modified: DateTime<Utc>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -257,6 +257,7 @@ pub struct TaskFrontmatter {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependencies: Vec<Dependency>,
 
+    #[serde(default)]
     pub context: ContextInfo,
 }
 

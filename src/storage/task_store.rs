@@ -278,6 +278,15 @@ With multiple paragraphs.
         let parsed = parse_task(&md).expect("parse");
         assert_eq!(parsed.frontmatter.title, "日本語タスク 🚀");
     }
+
+    #[test]
+    fn parse_task_without_context_field() {
+        // Simulate an old-format task file missing the context block
+        let content = "---\nid: TEST123\ntitle: Old task\nstatus: todo\ncreated: 2025-01-01T00:00:00Z\nmodified: 2025-01-01T00:00:00Z\n---\nSome body";
+        let task = parse_task(content).expect("should parse old format");
+        assert_eq!(task.frontmatter.title, "Old task");
+        assert!(task.frontmatter.context.working_dir.is_empty());
+    }
 }
 
 #[cfg(test)]
