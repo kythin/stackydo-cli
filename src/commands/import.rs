@@ -39,11 +39,8 @@ pub fn execute(args: &ImportArgs) -> Result<()> {
 
         // Priority
         if let Some(ref pri_str) = item.priority {
-            task.frontmatter.priority = Some(
-                pri_str
-                    .parse::<Priority>()
-                    .map_err(TodoError::Other)?,
-            );
+            task.frontmatter.priority =
+                Some(pri_str.parse::<Priority>().map_err(TodoError::Other)?);
         }
 
         // Tags
@@ -80,13 +77,23 @@ pub fn execute(args: &ImportArgs) -> Result<()> {
                 .map_err(TodoError::Other)?;
         }
 
+        // Save first, then allocate short ID only on success
         store.save(&task)?;
-        created_ids.push(id);
+        if let Ok(sid) = manifest_store.allocate_short_id() {
+            task.frontmatter.short_id = Some(sid);
+            let _ = store.save(&task);
+        }
+        let did = task
+            .frontmatter
+            .short_id
+            .clone()
+            .unwrap_or_else(|| id[..10].to_string());
+        created_ids.push(did);
     }
 
     println!("Imported {} task(s):", created_ids.len());
     for id in &created_ids {
-        println!("  {}", &id[..10]);
+        println!("  {id}");
     }
 
     Ok(())

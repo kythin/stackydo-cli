@@ -72,10 +72,7 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
 
     // Parse optional fields
     if let Some(ref p) = args.priority {
-        task.frontmatter.priority = Some(
-            p.parse::<Priority>()
-                .map_err(TodoError::Other)?,
-        );
+        task.frontmatter.priority = Some(p.parse::<Priority>().map_err(TodoError::Other)?);
     }
 
     if let Some(ref tags_csv) = args.tags {
@@ -142,13 +139,24 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
         }
     }
 
-    // Save
+    // Save first, then allocate short ID only on success
     store.save(&task)?;
 
-    // Print for shell integration
+    // Assign short ID after successful save to avoid burning IDs on failure
+    match manifest_store.allocate_short_id() {
+        Ok(sid) => {
+            task.frontmatter.short_id = Some(sid);
+            if let Err(e) = store.save(&task) {
+                eprintln!("Warning: failed to save short ID: {e}");
+            }
+        }
+        Err(e) => eprintln!("Warning: failed to allocate short ID: {e}"),
+    }
+
+    // Print ULID to stdout for shell integration (parseable)
     // Users can do: export STACKYDO_LAST_ID=$(stackydo create --title "..." -- body)
+    // Short ID is visible via `show` and `list` output.
     println!("{id}");
 
     Ok(id)
 }
-

@@ -361,11 +361,6 @@ impl StackydoMcp {
         let mut task = Task::new(id.clone(), title, cwd);
         task.frontmatter.context = ctx;
 
-        // Assign short ID
-        if let Ok(sid) = manifest_store.allocate_short_id() {
-            task.frontmatter.short_id = Some(sid);
-        }
-
         if let Some(body) = params.body {
             // Convert literal \n escape sequences from MCP JSON to real newlines
             task.body = body.replace("\\n", "\n");
@@ -403,8 +398,14 @@ impl StackydoMcp {
             }
         }
 
+        // Save first, then allocate short ID only on success
         match store.save(&task) {
             Ok(()) => {
+                // Allocate short ID after successful save
+                if let Ok(sid) = manifest_store.allocate_short_id() {
+                    task.frontmatter.short_id = Some(sid);
+                    let _ = store.save(&task);
+                }
                 let result = serde_json::json!({
                     "id": id,
                     "short_id": task.frontmatter.short_id,
