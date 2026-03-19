@@ -144,9 +144,21 @@ pub struct UpdateArgs {
     #[arg(long)]
     pub due: Option<String>,
 
+    /// Replace entire body content (empty string clears it)
+    #[arg(long)]
+    pub body_replace: Option<String>,
+
+    /// Sed-style substitution on body: s/pattern/replacement/[g]
+    #[arg(long)]
+    pub body_sub: Option<String>,
+
     /// Append a timestamped note to the body
     #[arg(long)]
     pub note: Option<String>,
+
+    /// Preview resulting body without saving
+    #[arg(long)]
+    pub dry_run: bool,
 
     /// Task ID that blocks this task (repeatable, appends)
     #[arg(long, action = ArgAction::Append)]

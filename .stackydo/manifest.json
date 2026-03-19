@@ -1,7 +1,21 @@
 {
   "version": "1.0",
-  "tags": [],
-  "stacks": [],
+  "tags": [
+    "storage",
+    "ai",
+    "config",
+    "model",
+    "tui",
+    "cli",
+    "breaking",
+    "docs",
+    "mcp",
+    "ux",
+    "dx"
+  ],
+  "stacks": [
+    "ideas"
+  ],
   "features": {},
   "settings": {
     "default_sort": "created",

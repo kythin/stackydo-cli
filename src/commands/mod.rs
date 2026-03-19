@@ -1,3 +1,4 @@
+pub mod body_edit;
 pub mod complete;
 pub mod mcp_setup;
 pub mod context;

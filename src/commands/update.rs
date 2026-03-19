@@ -136,7 +136,22 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
         changed = true;
     }
 
-    // Body (append)
+    // Body replace (step 1)
+    if let Some(ref new_body) = args.body_replace {
+        task.body = new_body.clone();
+        changed = true;
+    }
+
+    // Body substitution (step 2)
+    if let Some(ref expr) = args.body_sub {
+        let (regex, replacement, global) =
+            crate::commands::body_edit::parse_sed_expression(expr)?;
+        task.body =
+            crate::commands::body_edit::apply_substitution(&task.body, &regex, &replacement, global);
+        changed = true;
+    }
+
+    // Body append (step 3)
     if !args.body.is_empty() {
         let extra = args.body.join(" ");
         if task.body.is_empty() {
@@ -148,7 +163,7 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
         changed = true;
     }
 
-    // Note (timestamped append)
+    // Note — timestamped append (step 4)
     if let Some(ref note_text) = args.note {
         let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M");
         let entry = format!("\n[{timestamp}] {note_text}");
@@ -162,6 +177,21 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
 
     if !changed {
         println!("No changes specified.");
+        return Ok(());
+    }
+
+    // Dry-run: preview body without saving
+    if args.dry_run {
+        let has_body_op = args.body_replace.is_some()
+            || args.body_sub.is_some()
+            || !args.body.is_empty()
+            || args.note.is_some();
+        if !has_body_op {
+            return Err(TodoError::Other(
+                "--dry-run requires a body operation (--body-replace, --body-sub, trailing body, or --note)".into(),
+            ));
+        }
+        println!("--- Body preview (not saved) ---\n{}", task.body);
         return Ok(());
     }
 

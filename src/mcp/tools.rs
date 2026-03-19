@@ -115,9 +115,21 @@ pub struct UpdateTaskParams {
     /// New due date (empty string clears)
     #[schemars(default)]
     pub due: Option<String>,
+    /// Replace entire body content (empty string clears body)
+    #[schemars(default)]
+    pub body_replace: Option<String>,
+    /// Sed-style substitution on body: s/pattern/replacement/[g]
+    #[schemars(default)]
+    pub body_sub: Option<String>,
+    /// Append text to body
+    #[schemars(default)]
+    pub body_append: Option<String>,
     /// Append a timestamped note to the body
     #[schemars(default)]
     pub note: Option<String>,
+    /// Preview resulting body without saving (returns {"preview": true, "body": "..."})
+    #[schemars(default)]
+    pub dry_run: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -376,7 +388,7 @@ impl StackydoMcp {
         }
     }
 
-    #[rmcp::tool(description = "Update an existing task. Returns confirmation and updated task JSON. Use --note to append timestamped progress notes.")]
+    #[rmcp::tool(description = "Update an existing task. Returns confirmation and updated task JSON. Body operations apply in order: body_replace (set body), body_sub (sed-style s/pat/repl/[g] substitution), body_append (append text), note (timestamped append). Use dry_run=true to preview the resulting body without saving.")]
     fn update_task(
         &self,
         Parameters(params): Parameters<UpdateTaskParams>,
@@ -460,6 +472,41 @@ impl StackydoMcp {
             changed = true;
         }
 
+        // Body replace (step 1)
+        if let Some(ref new_body) = params.body_replace {
+            task.body = new_body.replace("\\n", "\n");
+            changed = true;
+        }
+
+        // Body substitution (step 2)
+        if let Some(ref expr) = params.body_sub {
+            match crate::commands::body_edit::parse_sed_expression(expr) {
+                Ok((regex, replacement, global)) => {
+                    task.body = crate::commands::body_edit::apply_substitution(
+                        &task.body,
+                        &regex,
+                        &replacement,
+                        global,
+                    );
+                    changed = true;
+                }
+                Err(e) => return err_to_string(e),
+            }
+        }
+
+        // Body append (step 3)
+        if let Some(ref append_text) = params.body_append {
+            let append_text = append_text.replace("\\n", "\n");
+            if task.body.is_empty() {
+                task.body = append_text;
+            } else {
+                task.body.push('\n');
+                task.body.push_str(&append_text);
+            }
+            changed = true;
+        }
+
+        // Note — timestamped append (step 4)
         if let Some(ref note_text) = params.note {
             // Convert literal \n escape sequences from MCP JSON to real newlines
             let note_text = note_text.replace("\\n", "\n");
@@ -475,6 +522,22 @@ impl StackydoMcp {
 
         if !changed {
             return "No changes specified.".to_string();
+        }
+
+        // Dry-run: return preview without saving
+        if params.dry_run.unwrap_or(false) {
+            let has_body_op = params.body_replace.is_some()
+                || params.body_sub.is_some()
+                || params.body_append.is_some()
+                || params.note.is_some();
+            if !has_body_op {
+                return err_to_string("dry_run requires a body operation (body_replace, body_sub, body_append, or note)");
+            }
+            let preview = serde_json::json!({
+                "preview": true,
+                "body": task.body,
+            });
+            return serde_json::to_string(&preview).unwrap_or_else(err_to_string);
         }
 
         task.frontmatter.modified = Utc::now();
