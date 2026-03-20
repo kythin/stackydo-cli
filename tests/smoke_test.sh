@@ -538,20 +538,23 @@ assert_json_valid "$SEARCH_JSON" "search --json: valid JSON"
 assert_contains "$SEARCH_JSON" '"Buy groceries"' "search --json: contains matching title"
 
 # ════════════════════════════════════════════════════════════════════════
-# SCENARIO 16: --note on update
+# SCENARIO 16: --note on update (structured comments)
 # ════════════════════════════════════════════════════════════════════════
-section "Scenario 16: --note on update"
+section "Scenario 16: --note on update (structured comments)"
 
 ID_NOTE=$($TODO_BIN create --title "Note test task" 2>&1)
 $TODO_BIN update "$ID_NOTE" --note "First progress update" >/dev/null 2>&1
 OUT_NOTE=$($TODO_BIN show "$ID_NOTE" 2>&1)
-assert_contains "$OUT_NOTE" "First progress update" "note: text appears in body"
+assert_contains "$OUT_NOTE" "First progress update" "note: text appears in comments"
+assert_contains "$OUT_NOTE" "Comments (1)" "note: Comments header with count"
 # Timestamp format: [YYYY-MM-DD HH:MM]
 if echo "$OUT_NOTE" | grep -qF "[20"; then
     pass "note: timestamp prefix present"
 else
     fail "note: timestamp prefix present" "Expected [20 in output"
 fi
+# Note should NOT appear in body section
+assert_not_contains "$OUT_NOTE" "--- Body ---" "note: no body section (note is in comments)"
 
 # ════════════════════════════════════════════════════════════════════════
 # SCENARIO 17: Due date filters
@@ -925,6 +928,38 @@ assert_contains "$AFTER_DRY" "original dry body" "dry-run: original body unchang
 # --dry-run without body op should error
 DRY_ERR=$($TODO_BIN update "$ID_DRY" --title "new title" --dry-run 2>&1) || true
 assert_contains "$DRY_ERR" "requires a body operation" "dry-run: errors without body op"
+
+# ════════════════════════════════════════════════════════════════════════
+# SCENARIO 29: comment subcommand
+# ════════════════════════════════════════════════════════════════════════
+section "Scenario 29: comment subcommand"
+
+ID_CMT=$($TODO_BIN create --title "Comment test task" 2>&1)
+
+# Add first comment
+CMT_OUT=$($TODO_BIN comment "$ID_CMT" "First comment" 2>&1)
+assert_contains "$CMT_OUT" "Comment added" "comment: confirmation message"
+
+# Add second comment
+$TODO_BIN comment "$ID_CMT" "Second comment" >/dev/null 2>&1
+
+# Show should display both comments with count
+SHOW_CMT=$($TODO_BIN show "$ID_CMT" 2>&1)
+assert_contains "$SHOW_CMT" "Comments (2)" "comment: count increments to 2"
+assert_contains "$SHOW_CMT" "First comment" "comment: first comment present"
+assert_contains "$SHOW_CMT" "Second comment" "comment: second comment present"
+
+# List should show comment indicator
+LIST_CMT=$($TODO_BIN list 2>&1)
+assert_contains "$LIST_CMT" "[2c]" "comment: list shows [2c] indicator"
+
+# Search should find by comment text
+SEARCH_CMT=$($TODO_BIN search "First comment" 2>&1)
+assert_contains "$SEARCH_CMT" "Comment test task" "comment: search finds task by comment text"
+
+# Stats should show comment metrics
+STATS_CMT=$($TODO_BIN stats 2>&1)
+assert_contains "$STATS_CMT" "Total comments:" "comment: stats shows comment metrics"
 
 # ════════════════════════════════════════════════════════════════════════
 # Summary

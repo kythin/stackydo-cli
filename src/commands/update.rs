@@ -1,7 +1,7 @@
 use crate::cli::args::UpdateArgs;
 use crate::commands::util::{active_workflow, display_id, parse_due_date};
 use crate::error::{Result, TodoError};
-use crate::model::task::{Dependency, DependencyType, Priority};
+use crate::model::task::{Comment, Dependency, DependencyType, Priority};
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
 use chrono::Utc;
@@ -163,15 +163,12 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
         changed = true;
     }
 
-    // Note — timestamped append (step 4)
+    // Note — add as structured comment (step 4)
     if let Some(ref note_text) = args.note {
-        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M");
-        let entry = format!("\n[{timestamp}] {note_text}");
-        if task.body.is_empty() {
-            task.body = entry.trim_start().to_string();
-        } else {
-            task.body.push_str(&entry);
-        }
+        task.frontmatter.comments.push(Comment {
+            ts: Utc::now(),
+            text: note_text.clone(),
+        });
         changed = true;
     }
 
@@ -182,13 +179,11 @@ pub fn execute(args: &UpdateArgs) -> Result<()> {
 
     // Dry-run: preview body without saving
     if args.dry_run {
-        let has_body_op = args.body_replace.is_some()
-            || args.body_sub.is_some()
-            || !args.body.is_empty()
-            || args.note.is_some();
+        let has_body_op =
+            args.body_replace.is_some() || args.body_sub.is_some() || !args.body.is_empty();
         if !has_body_op {
             return Err(TodoError::Other(
-                "--dry-run requires a body operation (--body-replace, --body-sub, trailing body, or --note)".into(),
+                "--dry-run requires a body operation (--body-replace, --body-sub, or trailing body)".into(),
             ));
         }
         println!("--- Body preview (not saved) ---\n{}", task.body);

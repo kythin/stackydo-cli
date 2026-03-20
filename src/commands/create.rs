@@ -46,7 +46,11 @@ pub fn execute(args: &CreateArgs) -> Result<String> {
     };
 
     // Determine title — treat whitespace-only explicit title as if it wasn't provided
-    let explicit_title = args.title.as_deref().filter(|t| !t.trim().is_empty()).map(|t| t.to_string());
+    let explicit_title = args
+        .title
+        .as_deref()
+        .filter(|t| !t.trim().is_empty())
+        .map(|t| t.to_string());
     let title = explicit_title
         .or_else(|| {
             // Use first line of body if no explicit title

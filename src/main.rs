@@ -41,6 +41,7 @@ fn main() {
         Some(Commands::McpSetup(ref args)) => commands::mcp_setup::execute(args),
         Some(Commands::ListWorkspaces(ref args)) => commands::list_workspaces::execute(args),
         Some(Commands::Migrate(ref args)) => commands::migrate::execute(args),
+        Some(Commands::Comment(ref args)) => commands::comment::execute(args),
     };
 
     if let Err(e) = result {

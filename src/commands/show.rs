@@ -84,6 +84,15 @@ pub fn execute(args: &ShowArgs) -> Result<()> {
         }
     }
 
+    // Comments
+    if !fm.comments.is_empty() {
+        println!("\n--- Comments ({}) ---", fm.comments.len());
+        for c in &fm.comments {
+            let local_ts = c.ts.with_timezone(&chrono::Local);
+            println!("[{}] {}", local_ts.format("%Y-%m-%d %H:%M"), c.text);
+        }
+    }
+
     // Body
     if !task.body.is_empty() {
         println!("\n--- Body ---");

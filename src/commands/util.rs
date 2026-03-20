@@ -118,10 +118,16 @@ pub fn format_task_row(fm: &TaskFrontmatter) -> String {
         .map(|s| format!(" @{s}"))
         .unwrap_or_default();
 
+    let comments = if fm.comments.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}c]", fm.comments.len())
+    };
+
     let did = display_id(fm);
 
     format!(
-        "{status:<12} {did:<10}  {pri:<10} {title}{due}{tags}{stack}",
+        "{status:<12} {did:<10}  {pri:<10} {title}{due}{tags}{stack}{comments}",
         status = fm.status,
         pri = pri,
         title = fm.title,

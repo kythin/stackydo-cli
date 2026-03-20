@@ -58,6 +58,9 @@ pub enum Commands {
 
     /// Move or copy tasks between workspaces
     Migrate(MigrateArgs),
+
+    /// Add a comment to a task
+    Comment(CommentArgs),
 }
 
 #[derive(Parser)]
@@ -152,7 +155,7 @@ pub struct UpdateArgs {
     #[arg(long)]
     pub body_sub: Option<String>,
 
-    /// Append a timestamped note to the body
+    /// Add a structured comment to the task (stored in frontmatter, not body)
     #[arg(long)]
     pub note: Option<String>,
 
@@ -443,6 +446,15 @@ pub struct ListWorkspacesArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
+}
+
+#[derive(Parser)]
+pub struct CommentArgs {
+    /// Task ID (ULID, short ID like SD1, or unique prefix)
+    pub id: String,
+
+    /// Comment text
+    pub text: String,
 }
 
 #[derive(Parser)]

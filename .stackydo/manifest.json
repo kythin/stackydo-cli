@@ -1,24 +1,29 @@
 {
   "version": "1.0",
   "tags": [
-    "config",
-    "cli",
-    "short-id",
     "testing",
-    "ai",
+    "model",
     "tui",
-    "breaking",
-    "mcp",
-    "dx",
+    "short-id",
+    "style",
     "migrate",
+    "config",
+    "mcp",
+    "correctness",
+    "robustness",
     "docs",
+    "breaking",
+    "dx",
     "storage",
+    "serde",
+    "ai",
     "ux",
-    "model"
+    "cli"
   ],
   "stacks": [
-    "ideas",
-    "bugs"
+    "audit",
+    "bugs",
+    "ideas"
   ],
   "features": {},
   "settings": {
@@ -42,5 +47,6 @@
       "doing": "in_progress",
       "inprogress": "in_progress"
     }
-  }
+  },
+  "next_short_id": 6
 }

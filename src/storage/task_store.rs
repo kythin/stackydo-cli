@@ -92,6 +92,10 @@ impl TaskStore {
             .filter(|t| {
                 t.frontmatter.title.to_lowercase().contains(&query_lower)
                     || t.body.to_lowercase().contains(&query_lower)
+                    || t.frontmatter
+                        .comments
+                        .iter()
+                        .any(|c| c.text.to_lowercase().contains(&query_lower))
             })
             .collect())
     }
@@ -359,6 +363,7 @@ mod proptest_tests {
                     parent_id: None,
                     subtask_ids: Vec::new(),
                     dependencies: Vec::new(),
+                    comments: Vec::new(),
                     context: ContextInfo {
                         working_dir: "/tmp".into(),
                         ..Default::default()

@@ -251,17 +251,23 @@ pub fn execute(args: &InitArgs) -> Result<()> {
         if !doc.is_object() {
             doc = serde_json::json!({});
         }
-        let root_obj = doc
-            .as_object_mut()
-            .ok_or_else(|| crate::error::TodoError::Other("Failed to parse .mcp.json as a JSON object".into()))?;
+        let root_obj = doc.as_object_mut().ok_or_else(|| {
+            crate::error::TodoError::Other("Failed to parse .mcp.json as a JSON object".into())
+        })?;
         if !root_obj.contains_key("mcpServers") {
             root_obj.insert("mcpServers".to_string(), serde_json::json!({}));
         }
         let servers = root_obj
             .get_mut("mcpServers")
-            .ok_or_else(|| crate::error::TodoError::Other("Missing 'mcpServers' key in .mcp.json".into()))?
+            .ok_or_else(|| {
+                crate::error::TodoError::Other("Missing 'mcpServers' key in .mcp.json".into())
+            })?
             .as_object_mut()
-            .ok_or_else(|| crate::error::TodoError::Other("'mcpServers' in .mcp.json is not a JSON object".into()))?;
+            .ok_or_else(|| {
+                crate::error::TodoError::Other(
+                    "'mcpServers' in .mcp.json is not a JSON object".into(),
+                )
+            })?;
         let already_had = servers.contains_key("stackydo");
         servers.insert("stackydo".to_string(), server_entry);
 

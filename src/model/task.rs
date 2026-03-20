@@ -171,6 +171,13 @@ pub enum DependencyType {
     RelatedTo,
 }
 
+/// A structured comment on a task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Comment {
+    pub ts: DateTime<Utc>,
+    pub text: String,
+}
+
 /// A dependency link to another task
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dependency {
@@ -256,6 +263,9 @@ pub struct TaskFrontmatter {
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependencies: Vec<Dependency>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<Comment>,
 
     #[serde(default)]
     pub context: ContextInfo,
@@ -454,6 +464,7 @@ impl Task {
                 parent_id: None,
                 subtask_ids: Vec::new(),
                 dependencies: Vec::new(),
+                comments: Vec::new(),
                 context: ContextInfo {
                     working_dir,
                     ..Default::default()

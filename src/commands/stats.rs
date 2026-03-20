@@ -22,6 +22,15 @@ struct StatsOutput {
     by_stage: BTreeMap<String, usize>,
     by_stack: BTreeMap<String, StackStats>,
     tags: BTreeMap<String, usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comments: Option<CommentStats>,
+}
+
+#[derive(Debug, Serialize)]
+struct CommentStats {
+    total_comments: usize,
+    tasks_with_comments: usize,
+    most_commented_task: Option<String>,
 }
 
 pub fn execute(args: &StatsArgs) -> Result<()> {
@@ -42,6 +51,10 @@ pub fn execute(args: &StatsArgs) -> Result<()> {
     let mut by_stack: BTreeMap<String, StackStats> = BTreeMap::new();
     let mut tags: BTreeMap<String, usize> = BTreeMap::new();
     let mut overdue = 0usize;
+
+    let mut total_comments = 0usize;
+    let mut tasks_with_comments = 0usize;
+    let mut most_commented: Option<(&str, &str, usize)> = None; // (display_id, title, count)
 
     for task in &tasks {
         let status_str = task.frontmatter.status.clone();
@@ -74,9 +87,33 @@ pub fn execute(args: &StatsArgs) -> Result<()> {
         for tag in &task.frontmatter.tags {
             *tags.entry(tag.clone()).or_default() += 1;
         }
+
+        // Comments
+        let comment_count = task.frontmatter.comments.len();
+        if comment_count > 0 {
+            total_comments += comment_count;
+            tasks_with_comments += 1;
+            if most_commented.map_or(true, |(_, _, c)| comment_count > c) {
+                most_commented = Some((
+                    crate::commands::util::display_id(&task.frontmatter),
+                    &task.frontmatter.title,
+                    comment_count,
+                ));
+            }
+        }
     }
 
     if args.json {
+        let comment_stats = if total_comments > 0 {
+            Some(CommentStats {
+                total_comments,
+                tasks_with_comments,
+                most_commented_task: most_commented
+                    .map(|(did, title, count)| format!("{did} — {title} ({count})")),
+            })
+        } else {
+            None
+        };
         let output = StatsOutput {
             total,
             overdue,
@@ -84,6 +121,7 @@ pub fn execute(args: &StatsArgs) -> Result<()> {
             by_stage,
             by_stack,
             tags,
+            comments: comment_stats,
         };
         return print_json(&output);
     }
@@ -124,6 +162,15 @@ pub fn execute(args: &StatsArgs) -> Result<()> {
         tag_vec.sort_by(|a, b| b.1.cmp(a.1));
         for (tag, count) in tag_vec {
             println!("  {tag}: {count}");
+        }
+    }
+
+    if total_comments > 0 {
+        println!("\nComments:");
+        println!("  Total comments: {total_comments}");
+        println!("  Tasks with comments: {tasks_with_comments}");
+        if let Some((did, title, count)) = most_commented {
+            println!("  Most commented: {did} — {title} ({count})");
         }
     }
 

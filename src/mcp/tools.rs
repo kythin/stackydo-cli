@@ -8,7 +8,7 @@ use crate::commands::util::{
     parse_due_date, FilterParams,
 };
 use crate::context::dir_context;
-use crate::model::task::{Priority, Task, TaskJson, TaskSummaryJson};
+use crate::model::task::{Comment, Priority, Task, TaskJson, TaskSummaryJson};
 use crate::storage::manifest_store::ManifestStore;
 use crate::storage::task_store::TaskStore;
 use crate::storage::workspace;
@@ -125,7 +125,7 @@ pub struct UpdateTaskParams {
     /// Append text to body
     #[schemars(default)]
     pub body_append: Option<String>,
-    /// Append a timestamped note to the body
+    /// Add a structured comment to the task (stored in frontmatter, not body)
     #[schemars(default)]
     pub note: Option<String>,
     /// Preview resulting body without saving (returns {"preview": true, "body": "..."})
@@ -188,6 +188,14 @@ pub struct SearchTasksParams {
     /// Include full task body in output (default: false, returns frontmatter only)
     #[schemars(default)]
     pub full: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct AddCommentParams {
+    /// Task ID (ULID, short ID like SD1, or unique prefix)
+    pub id: String,
+    /// Comment text
+    pub text: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -414,7 +422,7 @@ impl StackydoMcp {
     }
 
     #[rmcp::tool(
-        description = "Update an existing task. Returns confirmation and updated task JSON. Body operations apply in order: body_replace (set body), body_sub (sed-style s/pat/repl/[g] substitution), body_append (append text), note (timestamped append). Use dry_run=true to preview the resulting body without saving."
+        description = "Update an existing task. Returns confirmation and updated task JSON. Body operations apply in order: body_replace (set body), body_sub (sed-style s/pat/repl/[g] substitution), body_append (append text). Note adds a structured comment (stored in frontmatter, not body). Use dry_run=true to preview the resulting body without saving."
     )]
     fn update_task(&self, Parameters(params): Parameters<UpdateTaskParams>) -> String {
         let store = TaskStore::new();
@@ -529,15 +537,12 @@ impl StackydoMcp {
             changed = true;
         }
 
-        // Note — timestamped append (step 4)
+        // Note — add as structured comment (step 4)
         if let Some(ref note_text) = params.note {
-            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M");
-            let entry = format!("\n[{timestamp}] {note_text}");
-            if task.body.is_empty() {
-                task.body = entry.trim_start().to_string();
-            } else {
-                task.body.push_str(&entry);
-            }
+            task.frontmatter.comments.push(Comment {
+                ts: Utc::now(),
+                text: note_text.clone(),
+            });
             changed = true;
         }
 
@@ -549,10 +554,11 @@ impl StackydoMcp {
         if params.dry_run.unwrap_or(false) {
             let has_body_op = params.body_replace.is_some()
                 || params.body_sub.is_some()
-                || params.body_append.is_some()
-                || params.note.is_some();
+                || params.body_append.is_some();
             if !has_body_op {
-                return err_to_string("dry_run requires a body operation (body_replace, body_sub, body_append, or note)");
+                return err_to_string(
+                    "dry_run requires a body operation (body_replace, body_sub, or body_append)",
+                );
             }
             let preview = serde_json::json!({
                 "preview": true,
@@ -772,6 +778,25 @@ impl StackydoMcp {
             }
         }
 
+        let mut total_comments = 0usize;
+        let mut tasks_with_comments = 0usize;
+        for task in &tasks {
+            let c = task.frontmatter.comments.len();
+            if c > 0 {
+                total_comments += c;
+                tasks_with_comments += 1;
+            }
+        }
+
+        let comment_stats = if total_comments > 0 {
+            Some(CommentStatsJson {
+                total_comments,
+                tasks_with_comments,
+            })
+        } else {
+            None
+        };
+
         let output = StatsJson {
             total,
             overdue,
@@ -779,6 +804,7 @@ impl StackydoMcp {
             by_stage,
             by_stack,
             tags,
+            comments: comment_stats,
         };
         serde_json::to_string(&output).unwrap_or_else(err_to_string)
     }
@@ -867,7 +893,12 @@ impl StackydoMcp {
         let is_move = match params.operation.as_deref().unwrap_or("copy") {
             "move" => true,
             "copy" => false,
-            op => return err_to_string(format!("Invalid operation: '{}'. Use 'move' or 'copy'.", op)),
+            op => {
+                return err_to_string(format!(
+                    "Invalid operation: '{}'. Use 'move' or 'copy'.",
+                    op
+                ))
+            }
         };
         let dry_run = params.dry_run.unwrap_or(false);
         let force = params.force.unwrap_or(false);
@@ -970,6 +1001,29 @@ impl StackydoMcp {
         result
     }
 
+    #[rmcp::tool(description = "Add a comment to a task. Returns the updated task JSON.")]
+    fn add_comment(&self, Parameters(params): Parameters<AddCommentParams>) -> String {
+        let store = TaskStore::new();
+        let mut task = match resolve_task_pub(&store, &params.id) {
+            Ok(t) => t,
+            Err(e) => return err_to_string(e),
+        };
+
+        task.frontmatter.comments.push(Comment {
+            ts: Utc::now(),
+            text: params.text,
+        });
+        task.frontmatter.modified = Utc::now();
+
+        match store.save(&task) {
+            Ok(()) => {
+                let json_task = TaskJson::from(&task);
+                serde_json::to_string(&json_task).unwrap_or_else(err_to_string)
+            }
+            Err(e) => err_to_string(e),
+        }
+    }
+
     #[rmcp::tool(description = "Get all stacks with per-stack task counts and status breakdowns.")]
     fn get_stacks(&self) -> String {
         let store = TaskStore::new();
@@ -1045,6 +1099,12 @@ struct StackStatsJson {
 }
 
 #[derive(Debug, Serialize)]
+struct CommentStatsJson {
+    total_comments: usize,
+    tasks_with_comments: usize,
+}
+
+#[derive(Debug, Serialize)]
 struct StatsJson {
     total: usize,
     overdue: usize,
@@ -1052,4 +1112,6 @@ struct StatsJson {
     by_stage: BTreeMap<String, usize>,
     by_stack: BTreeMap<String, StackStatsJson>,
     tags: BTreeMap<String, usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comments: Option<CommentStatsJson>,
 }

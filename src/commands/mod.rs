@@ -1,4 +1,5 @@
 pub mod body_edit;
+pub mod comment;
 pub mod complete;
 pub mod context;
 pub mod create;

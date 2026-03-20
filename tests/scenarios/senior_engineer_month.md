@@ -2,7 +2,7 @@
 
 ## Overview
 
-Simulate one month of work for **Alex Chen**, a Senior Software Engineer at a mid-size SaaS company called **Meridian**. Alex leads a team of 3 engineers, reports to a Director of Engineering, and splits time across a major project, several smaller projects, and leadership/team responsibilities.
+Simulate one month of work for **Alex**, a Senior Software Engineer at a mid-size SaaS company called **Meridian**. Alex leads a team of 3 engineers, reports to a Director of Engineering, and splits time across a major project, several smaller projects, and leadership/team responsibilities.
 
 This scenario tests the **stacks** concept by creating tasks across multiple stacks representing real workstreams. It also tests task lifecycle (create, update, complete, delete), dependencies, priorities, tags, and search.
 
